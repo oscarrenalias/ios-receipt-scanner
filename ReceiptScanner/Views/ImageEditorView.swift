@@ -7,6 +7,7 @@ struct ImageEditorView: View {
     @State private var isShowingCropUI = false
     @State private var brightness: Double = 0
     @State private var contrast: Double = 1
+    @State private var sharpness: Double = 0
     @State private var isBlackAndWhite = false
     @State private var isProcessing = false
     
@@ -106,6 +107,24 @@ struct ImageEditorView: View {
                         }
                         .padding(.horizontal)
                         
+                        // Sharpness slider
+                        VStack(alignment: .leading) {
+                            HStack {
+                                Image(systemName: "slider.horizontal.below.rectangle")
+                                    .foregroundColor(.white)
+                                Text("Sharpness")
+                                    .foregroundColor(.white)
+                                Spacer()
+                            }
+                            
+                            Slider(value: $sharpness, in: 0...2, step: 0.05)
+                                .accentColor(.white)
+                                .onChange(of: sharpness) { _ in
+                                    applyFilters()
+                                }
+                        }
+                        .padding(.horizontal)
+                        
                         // Black & White toggle
                         Toggle(isOn: $isBlackAndWhite) {
                             HStack {
@@ -197,43 +216,71 @@ struct ImageEditorView: View {
     
     // Apply image filters based on current settings
     private func applyFilters() {
-        guard let ciImage = CIImage(image: originalImage) else { return }
+        isProcessing = true
         
-        var currentCIImage = ciImage
-        
-        // Apply brightness
-        if brightness != 0 {
-            let brightnessFilter = CIFilter(name: "CIColorControls")
-            brightnessFilter?.setValue(currentCIImage, forKey: kCIInputImageKey)
-            brightnessFilter?.setValue(brightness, forKey: kCIInputBrightnessKey)
-            if let outputImage = brightnessFilter?.outputImage {
-                currentCIImage = outputImage
+        DispatchQueue.global(qos: .userInitiated).async {
+            guard let ciImage = CIImage(image: self.originalImage) else {
+                DispatchQueue.main.async {
+                    self.isProcessing = false
+                }
+                return
             }
-        }
-        
-        // Apply contrast
-        if contrast != 1 {
-            let contrastFilter = CIFilter(name: "CIColorControls")
-            contrastFilter?.setValue(currentCIImage, forKey: kCIInputImageKey)
-            contrastFilter?.setValue(contrast, forKey: kCIInputContrastKey)
-            if let outputImage = contrastFilter?.outputImage {
-                currentCIImage = outputImage
+            
+            var currentCIImage = ciImage
+            
+            // Apply brightness
+            if self.brightness != 0 {
+                let brightnessFilter = CIFilter(name: "CIColorControls")
+                brightnessFilter?.setValue(currentCIImage, forKey: kCIInputImageKey)
+                brightnessFilter?.setValue(self.brightness, forKey: kCIInputBrightnessKey)
+                if let outputImage = brightnessFilter?.outputImage {
+                    currentCIImage = outputImage
+                }
             }
-        }
-        
-        // Apply black and white filter if enabled
-        if isBlackAndWhite {
-            let monoFilter = CIFilter(name: "CIPhotoEffectMono")
-            monoFilter?.setValue(currentCIImage, forKey: kCIInputImageKey)
-            if let outputImage = monoFilter?.outputImage {
-                currentCIImage = outputImage
+            
+            // Apply contrast
+            if self.contrast != 1 {
+                let contrastFilter = CIFilter(name: "CIColorControls")
+                contrastFilter?.setValue(currentCIImage, forKey: kCIInputImageKey)
+                contrastFilter?.setValue(self.contrast, forKey: kCIInputContrastKey)
+                if let outputImage = contrastFilter?.outputImage {
+                    currentCIImage = outputImage
+                }
             }
-        }
-        
-        // Convert back to UIImage
-        let context = CIContext()
-        if let cgImage = context.createCGImage(currentCIImage, from: currentCIImage.extent) {
-            editedImage = UIImage(cgImage: cgImage)
+            
+            // Apply sharpness
+            if self.sharpness > 0 {
+                let sharpenFilter = CIFilter(name: "CISharpenLuminance")
+                sharpenFilter?.setValue(currentCIImage, forKey: kCIInputImageKey)
+                sharpenFilter?.setValue(self.sharpness, forKey: kCIInputSharpnessKey)
+                if let outputImage = sharpenFilter?.outputImage {
+                    currentCIImage = outputImage
+                }
+            }
+            
+            // Apply black and white filter if enabled
+            if self.isBlackAndWhite {
+                let monoFilter = CIFilter(name: "CIPhotoEffectMono")
+                monoFilter?.setValue(currentCIImage, forKey: kCIInputImageKey)
+                if let outputImage = monoFilter?.outputImage {
+                    currentCIImage = outputImage
+                }
+            }
+            
+            // Convert back to UIImage
+            let context = CIContext()
+            if let cgImage = context.createCGImage(currentCIImage, from: currentCIImage.extent) {
+                let processedImage = UIImage(cgImage: cgImage)
+                
+                DispatchQueue.main.async {
+                    self.editedImage = processedImage
+                    self.isProcessing = false
+                }
+            } else {
+                DispatchQueue.main.async {
+                    self.isProcessing = false
+                }
+            }
         }
     }
     
@@ -242,6 +289,7 @@ struct ImageEditorView: View {
         editedImage = originalImage
         brightness = 0
         contrast = 1
+        sharpness = 0
         isBlackAndWhite = false
     }
     
