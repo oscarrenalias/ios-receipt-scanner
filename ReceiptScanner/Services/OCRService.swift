@@ -1,6 +1,5 @@
-import Foundation
-import Vision
 import UIKit
+import Vision
 
 class OCRService {
     static func recognizeText(from image: UIImage, completion: @escaping (String?) -> Void) {
@@ -9,32 +8,39 @@ class OCRService {
             return
         }
         
-        // Create a new image-request handler
+        // Create a new image request handler
         let requestHandler = VNImageRequestHandler(cgImage: cgImage, options: [:])
         
         // Create a new request to recognize text
         let request = VNRecognizeTextRequest { request, error in
-            guard let observations = request.results as? [VNRecognizedTextObservation],
-                  error == nil else {
+            if let error = error {
+                print("OCR error: \(error.localizedDescription)")
                 completion(nil)
                 return
             }
             
+            guard let observations = request.results as? [VNRecognizedTextObservation] else {
+                completion(nil)
+                return
+            }
+            
+            // Process the recognized text
             let recognizedText = observations.compactMap { observation in
                 observation.topCandidates(1).first?.string
             }.joined(separator: "\n")
             
-            completion(recognizedText)
+            completion(recognizedText.isEmpty ? nil : recognizedText)
         }
         
-        // Configure the recognition level
+        // Configure the request
         request.recognitionLevel = .accurate
+        request.usesLanguageCorrection = true
         
+        // Perform the request
         do {
-            // Perform the text-recognition request
             try requestHandler.perform([request])
         } catch {
-            print("Unable to perform the request: \(error).")
+            print("OCR request failed: \(error.localizedDescription)")
             completion(nil)
         }
     }

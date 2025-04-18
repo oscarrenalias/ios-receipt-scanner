@@ -1,224 +1,272 @@
-//
-//  ImageEditorView.swift
-//  ReceiptScanner
-//
-//  Created by oscar.renalias on 18.4.2025.
-//
-
-
 import SwiftUI
-import CoreImage
-import CoreImage.CIFilterBuiltins
+import UIKit
 
 struct ImageEditorView: View {
-    let image: UIImage
+    @Environment(\.dismiss) private var dismiss
+    @State private var editedImage: UIImage
+    @State private var isShowingCropUI = false
+    @State private var brightness: Double = 0
+    @State private var contrast: Double = 1
+    @State private var isBlackAndWhite = false
+    @State private var isProcessing = false
     
-    @State private var processedImage: UIImage?
-    @State private var brightness: Double = 0.0
-    @State private var contrast: Double = 1.0
-    @State private var sharpness: Double = 0.0
-    @State private var isBlackAndWhite: Bool = false
-    @State private var showingCropView = false
-    @State private var showingSaveOptions = false
-    @State private var croppedImage: UIImage?
+    // For keeping track of the original image
+    private let originalImage: UIImage
     
-    @Environment(\.presentationMode) var presentationMode
+    // Callback for when editing is complete
+    var onImageEdited: (UIImage) -> Void
     
-    var body: some View {
-        VStack {
-            ScrollView {
-                VStack(spacing: 20) {
-                    Image(uiImage: processedImage ?? image)
-                        .resizable()
-                        .scaledToFit()
-                        .cornerRadius(8)
-                        .padding()
-                    
-                    VStack(spacing: 15) {
-                        Button(action: {
-                            showingCropView = true
-                        }) {
-                            HStack {
-                                Image(systemName: "crop")
-                                Text("Crop Image")
-                            }
-                            .frame(minWidth: 0, maxWidth: .infinity)
-                            .padding()
-                            .background(Color.blue)
-                            .foregroundColor(.white)
-                            .cornerRadius(10)
-                        }
-                        
-                        VStack(alignment: .leading) {
-                            Text("Brightness: \(Int(brightness * 100))%")
-                            Slider(value: $brightness, in: -0.5...0.5, step: 0.01)
-                                .onChange(of: brightness) { _ in
-                                    updateImage()
-                                }
-                        }
-                        
-                        VStack(alignment: .leading) {
-                            Text("Contrast: \(Int(contrast * 100))%")
-                            Slider(value: $contrast, in: 0.5...1.5, step: 0.01)
-                                .onChange(of: contrast) { _ in
-                                    updateImage()
-                                }
-                        }
-                        
-                        VStack(alignment: .leading) {
-                            Text("Sharpness: \(Int(sharpness * 100))%")
-                            Slider(value: $sharpness, in: 0...1, step: 0.01)
-                                .onChange(of: sharpness) { _ in
-                                    updateImage()
-                                }
-                        }
-                        
-                        Toggle(isOn: $isBlackAndWhite) {
-                            Text("Black & White")
-                        }
-                        .onChange(of: isBlackAndWhite) { _ in
-                            updateImage()
-                        }
-                        .padding(.vertical)
-                    }
-                    .padding()
-                }
-            }
-            
-            Button(action: {
-                showingSaveOptions = true
-            }) {
-                Text("Save Receipt")
-                    .fontWeight(.semibold)
-                    .frame(minWidth: 0, maxWidth: .infinity)
-                    .padding()
-                    .background(Color.green)
-                    .foregroundColor(.white)
-                    .cornerRadius(10)
-                    .padding()
-            }
-        }
-        .navigationTitle("Edit Receipt")
-        .navigationBarTitleDisplayMode(.inline)
-        .onAppear {
-            processedImage = image
-        }
-        .sheet(isPresented: $showingCropView) {
-            let img = processedImage ?? image
-            ImageCropView(image: img) { croppedImg in
-                if let croppedImg = croppedImg {
-                    self.processedImage = croppedImg
-                    updateImage()
-                }
-            }
-        }
-        .actionSheet(isPresented: $showingSaveOptions) {
-            ActionSheet(
-                title: Text("Save Options"),
-                message: Text("Choose where to save your receipt"),
-                buttons: [
-                    .default(Text("Save to Photos")) {
-                        saveToPhotos()
-                    },
-                    .default(Text("Save to Files")) {
-                        // This would typically use UIDocumentPickerViewController
-                        // For simplicity, we'll just save to photos in this example
-                        saveToPhotos()
-                    },
-                    .default(Text("Process with OCR")) {
-                        performOCR()
-                    },
-                    .cancel()
-                ]
-            )
-        }
+    init(image: UIImage, onImageEdited: @escaping (UIImage) -> Void) {
+        self._editedImage = State(initialValue: image)
+        self.originalImage = image
+        self.onImageEdited = onImageEdited
     }
     
-    func updateImage() {
-        let inputImage = processedImage ?? image
-        guard let ciImage = CIImage(image: inputImage) else { return }
+    var body: some View {
+        ZStack {
+            // Black background
+            Color.black.edgesIgnoringSafeArea(.all)
+            
+            // Image display
+            GeometryReader { geometry in
+                Image(uiImage: editedImage)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+            }
+            
+            // Top toolbar with close button
+            VStack {
+                HStack {
+                    Button(action: {
+                        dismiss()
+                    }) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 20, weight: .bold))
+                            .foregroundColor(.white)
+                            .padding()
+                            .background(Circle().fill(Color.black.opacity(0.5)))
+                    }
+                    .padding(.leading, 16)
+                    
+                    Spacer()
+                    
+                    Button(action: {
+                        saveEdits()
+                    }) {
+                        Text("Done")
+                            .fontWeight(.bold)
+                            .foregroundColor(.white)
+                            .padding()
+                            .background(Capsule().fill(Color.blue))
+                    }
+                    .padding(.trailing, 16)
+                }
+                .padding(.top, 8)
+                
+                Spacer()
+                
+                // Bottom toolbar
+                VStack(spacing: 20) {
+                    // Editing controls
+                    if !isShowingCropUI {
+                        // Brightness slider
+                        VStack(alignment: .leading) {
+                            HStack {
+                                Image(systemName: "sun.min")
+                                    .foregroundColor(.white)
+                                Text("Brightness")
+                                    .foregroundColor(.white)
+                                Spacer()
+                            }
+                            
+                            Slider(value: $brightness, in: -1...1, step: 0.05)
+                                .accentColor(.white)
+                                .onChange(of: brightness) { _ in
+                                    applyFilters()
+                                }
+                        }
+                        .padding(.horizontal)
+                        
+                        // Contrast slider
+                        VStack(alignment: .leading) {
+                            HStack {
+                                Image(systemName: "circle.lefthalf.filled")
+                                    .foregroundColor(.white)
+                                Text("Contrast")
+                                    .foregroundColor(.white)
+                                Spacer()
+                            }
+                            
+                            Slider(value: $contrast, in: 0.5...1.5, step: 0.05)
+                                .accentColor(.white)
+                                .onChange(of: contrast) { _ in
+                                    applyFilters()
+                                }
+                        }
+                        .padding(.horizontal)
+                        
+                        // Black & White toggle
+                        Toggle(isOn: $isBlackAndWhite) {
+                            HStack {
+                                Image(systemName: "camera.filters")
+                                    .foregroundColor(.white)
+                                Text("Black & White")
+                                    .foregroundColor(.white)
+                            }
+                        }
+                        .toggleStyle(SwitchToggleStyle(tint: .blue))
+                        .padding(.horizontal)
+                        .onChange(of: isBlackAndWhite) { _ in
+                            applyFilters()
+                        }
+                    }
+                    
+                    // Bottom action buttons
+                    HStack(spacing: 30) {
+                        Button(action: {
+                            isShowingCropUI.toggle()
+                        }) {
+                            VStack {
+                                Image(systemName: isShowingCropUI ? "checkmark" : "crop")
+                                    .font(.system(size: 24))
+                                    .foregroundColor(.white)
+                                Text(isShowingCropUI ? "Done" : "Crop")
+                                    .font(.caption)
+                                    .foregroundColor(.white)
+                            }
+                        }
+                        
+                        Button(action: {
+                            resetImage()
+                        }) {
+                            VStack {
+                                Image(systemName: "arrow.counterclockwise")
+                                    .font(.system(size: 24))
+                                    .foregroundColor(.white)
+                                Text("Reset")
+                                    .font(.caption)
+                                    .foregroundColor(.white)
+                            }
+                        }
+                        
+                        Button(action: {
+                            performOCR()
+                        }) {
+                            VStack {
+                                Image(systemName: "text.viewfinder")
+                                    .font(.system(size: 24))
+                                    .foregroundColor(.white)
+                                Text("OCR")
+                                    .font(.caption)
+                                    .foregroundColor(.white)
+                            }
+                        }
+                    }
+                    .padding(.vertical)
+                }
+                .padding(.bottom, 20)
+                .background(
+                    LinearGradient(
+                        gradient: Gradient(colors: [Color.black.opacity(0), Color.black.opacity(0.8)]),
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+            }
+            
+            // Processing overlay
+            if isProcessing {
+                ZStack {
+                    Color.black.opacity(0.7)
+                    VStack {
+                        ProgressView()
+                            .scaleEffect(1.5)
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        Text("Processing...")
+                            .foregroundColor(.white)
+                            .padding(.top)
+                    }
+                }
+                .edgesIgnoringSafeArea(.all)
+            }
+        }
+        .statusBar(hidden: true)
+        .edgesIgnoringSafeArea(.all)
+    }
+    
+    // Apply image filters based on current settings
+    private func applyFilters() {
+        guard let ciImage = CIImage(image: originalImage) else { return }
         
-        let context = CIContext()
         var currentCIImage = ciImage
         
-        // Apply brightness and contrast
-        let brightnessFilter = CIFilter.colorControls()
-        brightnessFilter.inputImage = currentCIImage
-        brightnessFilter.brightness = Float(brightness)
-        brightnessFilter.contrast = Float(contrast)
-        
-        if let outputImage = brightnessFilter.outputImage {
-            currentCIImage = outputImage
-        }
-        
-        // Apply sharpness
-        if sharpness > 0 {
-            let sharpenFilter = CIFilter.sharpenLuminance()
-            sharpenFilter.inputImage = currentCIImage
-            sharpenFilter.sharpness = Float(sharpness * 2)
-            
-            if let outputImage = sharpenFilter.outputImage {
+        // Apply brightness
+        if brightness != 0 {
+            let brightnessFilter = CIFilter(name: "CIColorControls")
+            brightnessFilter?.setValue(currentCIImage, forKey: kCIInputImageKey)
+            brightnessFilter?.setValue(brightness, forKey: kCIInputBrightnessKey)
+            if let outputImage = brightnessFilter?.outputImage {
                 currentCIImage = outputImage
             }
         }
         
-        // Apply black and white filter if selected
+        // Apply contrast
+        if contrast != 1 {
+            let contrastFilter = CIFilter(name: "CIColorControls")
+            contrastFilter?.setValue(currentCIImage, forKey: kCIInputImageKey)
+            contrastFilter?.setValue(contrast, forKey: kCIInputContrastKey)
+            if let outputImage = contrastFilter?.outputImage {
+                currentCIImage = outputImage
+            }
+        }
+        
+        // Apply black and white filter if enabled
         if isBlackAndWhite {
-            let monoFilter = CIFilter.photoEffectMono()
-            monoFilter.inputImage = currentCIImage
-            
-            if let outputImage = monoFilter.outputImage {
+            let monoFilter = CIFilter(name: "CIPhotoEffectMono")
+            monoFilter?.setValue(currentCIImage, forKey: kCIInputImageKey)
+            if let outputImage = monoFilter?.outputImage {
                 currentCIImage = outputImage
             }
         }
         
         // Convert back to UIImage
+        let context = CIContext()
         if let cgImage = context.createCGImage(currentCIImage, from: currentCIImage.extent) {
-            processedImage = UIImage(cgImage: cgImage)
+            editedImage = UIImage(cgImage: cgImage)
         }
     }
     
-    func saveToPhotos() {
-        guard let image = processedImage else { return }
-        
-        UIImageWriteToSavedPhotosAlbum(image, nil, nil, nil)
-        
-        // Show a success message
-        let alert = UIAlertController(title: "Saved", message: "Receipt saved to Photos", preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "OK", style: .default))
-        
-        // Find the currently presented view controller
-        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-           let rootViewController = windowScene.windows.first?.rootViewController {
-            var currentController = rootViewController
-            while let presentedController = currentController.presentedViewController {
-                currentController = presentedController
-            }
-            currentController.present(alert, animated: true)
-        }
+    // Reset to original image
+    private func resetImage() {
+        editedImage = originalImage
+        brightness = 0
+        contrast = 1
+        isBlackAndWhite = false
     }
     
-    func performOCR() {
-        // In a real app, you would integrate with Vision framework for OCR
-        // For this example, we'll just show a placeholder message
-        let alert = UIAlertController(title: "OCR Processing", message: "Text recognition would be performed here using Vision framework", preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "OK", style: .default))
+    // Save edits and dismiss
+    private func saveEdits() {
+        onImageEdited(editedImage)
+        dismiss()
+    }
+    
+    // Perform OCR on the image
+    private func performOCR() {
+        isProcessing = true
         
-        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-           let rootViewController = windowScene.windows.first?.rootViewController {
-            var currentController = rootViewController
-            while let presentedController = currentController.presentedViewController {
-                currentController = presentedController
-            }
-            currentController.present(alert, animated: true)
+        // Here you would implement OCR functionality
+        // For now, we'll just simulate processing
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            isProcessing = false
+            // In a real implementation, you would process the OCR results here
         }
     }
 }
 
+// Preview
 struct ImageEditorView_Previews: PreviewProvider {
     static var previews: some View {
-        NavigationView {
-            ImageEditorView(image: UIImage(systemName: "doc.text.viewfinder") ?? UIImage())
-        }
+        ImageEditorView(image: UIImage(systemName: "doc")!) { _ in }
     }
 }
