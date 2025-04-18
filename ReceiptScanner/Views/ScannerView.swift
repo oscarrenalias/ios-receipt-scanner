@@ -1,13 +1,30 @@
 import SwiftUI
 import PhotosUI
+import UIKit
+
+class ImageSaver: NSObject {
+    var successHandler: (() -> Void)?
+    var errorHandler: ((Error) -> Void)?
+    
+    @objc func image(_ image: UIImage, didFinishSavingWithError error: Error?, contextInfo: UnsafeRawPointer) {
+        if let error = error {
+            errorHandler?(error)
+        } else {
+            successHandler?()
+        }
+    }
+}
 
 struct ScannerView: View {
+    private let imageSaver = ImageSaver()
     @State private var showingCamera = false
     @State private var showingPhotoPicker = false
     @State private var showingImageEditor = false
     @State private var scannedImage: UIImage?
     @State private var processedImage: UIImage?
     @State private var photoPickerItems: [PhotosPickerItem] = []
+    @State private var showingSaveConfirmation = false
+    @State private var saveConfirmationMessage = ""
     @Environment(\.colorScheme) private var colorScheme
     
     var body: some View {
@@ -154,6 +171,36 @@ struct ScannerView: View {
                     }
                 }
             }
+            .overlay(
+                Group {
+                    if showingSaveConfirmation {
+                        VStack {
+                            Spacer()
+                            
+                            HStack {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(.green)
+                                    .font(.title)
+                                
+                                Text(saveConfirmationMessage)
+                                    .font(.headline)
+                                    .foregroundColor(.primary)
+                            }
+                            .padding()
+                            .background(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .fill(colorScheme == .dark ? 
+                                          Color(UIColor.systemGray6) : 
+                                          Color(UIColor.systemBackground))
+                                    .shadow(color: Color.black.opacity(0.2), radius: 5)
+                            )
+                            .padding(.bottom, 100) // Position above the tab bar
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                            .animation(.easeInOut, value: showingSaveConfirmation)
+                        }
+                    }
+                }
+            )
         }
         .preferredColorScheme(colorScheme) // Preserve the current color scheme
     }
@@ -181,11 +228,41 @@ struct ScannerView: View {
         
         PermissionsService.shared.requestPhotoLibraryAddOnlyPermission { granted in
             if granted {
-                UIImageWriteToSavedPhotosAlbum(image, nil, nil, nil)
+                // Configure the image saver
+                self.imageSaver.successHandler = {
+                    DispatchQueue.main.async {
+                        self.saveConfirmationMessage = "Receipt saved to your photo library!"
+                        self.showingSaveConfirmation = true
+                        
+                        // Provide haptic feedback
+                        let generator = UINotificationFeedbackGenerator()
+                        generator.notificationOccurred(.success)
+                        
+                        // Auto-dismiss after 2 seconds
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                            self.showingSaveConfirmation = false
+                        }
+                    }
+                }
                 
-                // Show a success message
-                let generator = UINotificationFeedbackGenerator()
-                generator.notificationOccurred(.success)
+                self.imageSaver.errorHandler = { error in
+                    DispatchQueue.main.async {
+                        self.saveConfirmationMessage = "Error saving image: \(error.localizedDescription)"
+                        self.showingSaveConfirmation = true
+                        
+                        // Provide error feedback
+                        let generator = UINotificationFeedbackGenerator()
+                        generator.notificationOccurred(.error)
+                        
+                        // Auto-dismiss after 3 seconds
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                            self.showingSaveConfirmation = false
+                        }
+                    }
+                }
+                
+                // Save the image
+                UIImageWriteToSavedPhotosAlbum(image, self.imageSaver, #selector(ImageSaver.image(_:didFinishSavingWithError:contextInfo:)), nil)
             }
             // The PermissionsService will handle showing the alert if permission is denied
         }
