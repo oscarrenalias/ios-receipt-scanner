@@ -1,9 +1,12 @@
 import SwiftUI
+import PhotosUI
 
 struct ScannerView: View {
     @State private var showingCamera = false
+    @State private var showingPhotoPicker = false
     @State private var scannedImage: UIImage?
     @State private var isProcessingImage = false
+    @State private var photoPickerItems: [PhotosPickerItem] = []
     
     var body: some View {
         VStack(spacing: 20) {
@@ -86,6 +89,28 @@ struct ScannerView: View {
                 }
             )
         }
+        .photosPicker(
+            isPresented: $showingPhotoPicker,
+            selection: $photoPickerItems,
+            maxSelectionCount: 1,
+            matching: .images
+        )
+        .onChange(of: photoPickerItems) { newItems in
+            guard let item = newItems.first else { return }
+            
+            item.loadTransferable(type: Data.self) { result in
+                switch result {
+                case .success(let data):
+                    if let data = data, let image = UIImage(data: data) {
+                        DispatchQueue.main.async {
+                            self.scannedImage = image
+                        }
+                    }
+                case .failure(let error):
+                    print("Photo picker error: \(error)")
+                }
+            }
+        }
         .overlay(
             Group {
                 if isProcessingImage {
@@ -117,9 +142,7 @@ struct ScannerView: View {
     private func requestPhotoLibraryAccess() {
         PermissionsService.shared.requestPhotoLibraryPermission { granted in
             if granted {
-                // Here you would show a photo picker
-                // For now, we'll just print a message
-                print("Photo library access granted")
+                showingPhotoPicker = true
             }
             // The PermissionsService will handle showing the alert if permission is denied
         }
