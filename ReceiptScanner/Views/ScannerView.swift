@@ -33,17 +33,28 @@ struct ScannerView: View {
                 // Main content
                 VStack(spacing: 20) {
                     if let image = processedImage ?? scannedImage {
-                        Image(uiImage: image)
-                            .resizable()
-                            .scaledToFit()
-                            .frame(maxHeight: 400)
-                            .cornerRadius(10)
-                            .shadow(radius: 5)
-                            .onTapGesture {
-                                if let _ = scannedImage {
-                                    showingImageEditor = true
+                        VStack {
+                            // Add top padding to move the image down from the top
+                            Spacer().frame(height: 50)
+                            
+                            Image(uiImage: image)
+                                .resizable()
+                                .scaledToFit()
+                                //.frame(maxHeight: 400)
+                                .cornerRadius(10)
+                                .shadow(radius: 5)
+                                .onTapGesture {
+                                    if let _ = scannedImage {
+                                        showingImageEditor = true
+                                    }
                                 }
-                            }                                      
+                            
+                            // Add instructional text below the image
+                            Text("Tap image to edit and save")
+                                .foregroundColor(.secondary)
+                                .font(.subheadline)
+                                .padding(.top, 8)
+                        }
                     } else {
                         VStack {
                             Image(systemName: "doc.text.viewfinder")
@@ -154,10 +165,8 @@ struct ScannerView: View {
                 }
             }
             .fullScreenCover(isPresented: $showingImageEditor, onDismiss: {
-                // Reset the images when the editor is dismissed
-                self.scannedImage = nil
-                self.processedImage = nil
-                print("🔍 ScannerView: Image editor dismissed, images reset")
+                // Keep the images when the editor is dismissed
+                print("🔍 ScannerView: Image editor dismissed, keeping images")
             }) {
                 if let image = scannedImage {
                     EnhancedImageEditorView(image: image)

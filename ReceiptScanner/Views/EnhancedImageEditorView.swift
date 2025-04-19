@@ -315,7 +315,10 @@ struct EnhancedImageEditorView: View {
                 .navigationBarItems(leading: 
                     Button(action: {
                         print("🔍 Close button tapped, dismissing editor")
-                        presentationMode.wrappedValue.dismiss()
+                        // Simple dismissal without clearing images
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            presentationMode.wrappedValue.dismiss()
+                        }
                     }) {
                         Image(systemName: "xmark")
                             .foregroundColor(.white)

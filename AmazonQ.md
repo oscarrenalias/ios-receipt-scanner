@@ -23,7 +23,9 @@
    - Added an "X" close button to dismiss the editor
    - Styled the close button with a circular background
    - Ensured proper navigation flow between views
-   - Reset images when closing the editor to return to "no document yet" state
+   - Added instructional text "Tap image to edit and save" below the image
+   - Added padding to move the image down from the top of the screen
+   - Kept the image visible after editing for further modifications
 
 5. **Fixed cropping functionality:**
    - Added proper zoom support with pinch and double-tap gestures
@@ -40,6 +42,7 @@
 7. **Fixed sheet presentation issues:**
    - Ensured proper sheet presentation for the crop view
    - Added print statements to verify sheet presentation
+   - Improved transition animations between views
 
 8. **Improved code organization:**
    - Simplified class structure
@@ -67,6 +70,6 @@ The app now uses a single, consistent image editing flow:
 2. Edit with EnhancedImageEditorView (with zoom capability)
 3. Use ImageCropView for cropping when needed (with zoom capability)
 4. Save or share the processed image
-5. When closing the editor, return to the scanner view with "no document yet" state
+5. Return to the scanner view with the image still visible for further editing
 
-All functionality remains the same, but with a cleaner, more maintainable codebase.
+All functionality remains the same, but with a cleaner, more maintainable codebase with improved user guidance.
