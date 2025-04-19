@@ -20,6 +20,7 @@ struct EnhancedImageEditorView: View {
     @State private var isProcessing = false
     @State private var imageURL: URL?
     @State private var zoomScale: CGFloat = 1.0
+    @State private var rotationAngle: Int = 0 // 0, 90, 180, 270 degrees
     
     @Environment(\.presentationMode) var presentationMode
     @Environment(\.colorScheme) private var colorScheme
@@ -33,12 +34,16 @@ struct EnhancedImageEditorView: View {
             
             // Save the image to the temporary URL
             if let imageData = processedImage.jpegData(compressionQuality: 0.9) {
-                try? imageData.write(to: fileURL)
-                
-                // Update the UI on the main thread
-                DispatchQueue.main.async {
-                    self.imageURL = fileURL
-                    print("🔍 Image cached at: \(fileURL.path)")
+                do {
+                    try imageData.write(to: fileURL)
+                    
+                    // Update the UI on the main thread
+                    DispatchQueue.main.async {
+                        self.imageURL = fileURL
+                        print("🔍 Image cached at: \(fileURL.path)")
+                    }
+                } catch {
+                    print("❌ Failed to write image data: \(error.localizedDescription)")
                 }
             }
         }
@@ -124,7 +129,68 @@ struct EnhancedImageEditorView: View {
         contrast = 1.0
         sharpness = 0.0
         isBlackAndWhite = false
+        rotationAngle = 0
         cacheAndDisplayImage()
+    }
+    
+    private func rotateImage() {
+        isProcessing = true
+        
+        DispatchQueue.global(qos: .userInitiated).async {
+            // Get the current image
+            let currentImage = self.processedImage ?? self.image
+            
+            // Make sure we have a valid CGImage
+            guard let cgImage = currentImage.cgImage else {
+                DispatchQueue.main.async {
+                    self.isProcessing = false
+                }
+                return
+            }
+            
+            // Create a context with the same size as the image
+            let width = cgImage.width
+            let height = cgImage.height
+            guard let context = CGContext(
+                data: nil,
+                width: height, // Swap width and height for rotation
+                height: width,
+                bitsPerComponent: cgImage.bitsPerComponent,
+                bytesPerRow: 0,
+                space: cgImage.colorSpace ?? CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: cgImage.bitmapInfo.rawValue
+            ) else {
+                DispatchQueue.main.async {
+                    self.isProcessing = false
+                    print("❌ Failed to create graphics context")
+                }
+                return
+            }
+            
+            // Rotate the context 90 degrees clockwise
+            context.translateBy(x: 0, y: CGFloat(width))
+            context.rotate(by: -CGFloat.pi / 2)
+            context.draw(cgImage, in: CGRect(x: 0, y: 0, width: CGFloat(width), height: CGFloat(height)))
+            
+            // Get the rotated image from the context
+            guard let rotatedCGImage = context.makeImage() else {
+                DispatchQueue.main.async {
+                    self.isProcessing = false
+                    print("❌ Failed to create rotated image")
+                }
+                return
+            }
+            
+            // Create a UIImage from the rotated CGImage
+            let rotatedImage = UIImage(cgImage: rotatedCGImage)
+            
+            DispatchQueue.main.async {
+                self.processedImage = rotatedImage
+                self.cacheAndDisplayImage()
+                self.isProcessing = false
+                print("🔄 Image rotated successfully")
+            }
+        }
     }
     
     private func performOCR() {
@@ -202,6 +268,7 @@ struct EnhancedImageEditorView: View {
                                 .scaledToFit()
                                 .padding(.top, 20) // Add padding at the top
                                 .padding(.horizontal)
+                                .id(imageURL.absoluteString) // Force view refresh when URL changes
                         } else if let processedImage = processedImage, !isProcessing {
                             Image(uiImage: processedImage)
                                 .resizable()
@@ -325,6 +392,21 @@ struct EnhancedImageEditorView: View {
                                 Image(systemName: "crop")
                                     .font(.system(size: 24))
                                 Text("Crop")
+                                    .font(.caption)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                        }
+                        .foregroundColor(.blue)
+                        
+                        // Rotate button
+                        Button(action: {
+                            rotateImage()
+                        }) {
+                            VStack(spacing: 4) {
+                                Image(systemName: "rotate.right")
+                                    .font(.system(size: 24))
+                                Text("Rotate")
                                     .font(.caption)
                             }
                             .frame(maxWidth: .infinity)
