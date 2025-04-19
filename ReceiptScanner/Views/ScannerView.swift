@@ -153,7 +153,12 @@ struct ScannerView: View {
                     }
                 }
             }
-            .fullScreenCover(isPresented: $showingImageEditor) {
+            .fullScreenCover(isPresented: $showingImageEditor, onDismiss: {
+                // Reset the images when the editor is dismissed
+                self.scannedImage = nil
+                self.processedImage = nil
+                print("🔍 ScannerView: Image editor dismissed, images reset")
+            }) {
                 if let image = scannedImage {
                     EnhancedImageEditorView(image: image)
                 }
