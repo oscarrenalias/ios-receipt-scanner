@@ -19,6 +19,7 @@ struct EnhancedImageEditorView: View {
     @State private var ocrText: String = ""
     @State private var isProcessing = false
     @State private var imageURL: URL?
+    @State private var zoomScale: CGFloat = 1.0
     
     @Environment(\.presentationMode) var presentationMode
     
@@ -187,43 +188,59 @@ struct EnhancedImageEditorView: View {
             ZStack {
                 Color.black.edgesIgnoringSafeArea(.all)
                 
-                VStack {
-                    if let imageURL = imageURL, !isProcessing {
-                        WebImage(url: imageURL)
-                            .resizable()
-                            .scaledToFit()
-                            .padding()
-                    } else if let processedImage = processedImage, !isProcessing {
-                        ZoomableImageView(image: processedImage)
-                            .padding()
-                    } else if !isProcessing {
-                        ZoomableImageView(image: image)
-                            .padding()
+                // Main content with zoomable image
+                ZoomableScrollView(currentScale: $zoomScale) {
+                    VStack {
+                        if let imageURL = imageURL, !isProcessing {
+                            WebImage(url: imageURL)
+                                .resizable()
+                                .scaledToFit()
+                                .padding()
+                        } else if let processedImage = processedImage, !isProcessing {
+                            Image(uiImage: processedImage)
+                                .resizable()
+                                .scaledToFit()
+                                .padding()
+                        } else if !isProcessing {
+                            Image(uiImage: image)
+                                .resizable()
+                                .scaledToFit()
+                                .padding()
+                        }
+                        
+                        // Add extra space at the bottom to ensure the image is visible above controls
+                        Spacer(minLength: 300)
                     }
-                    
-                    // Show a single processing indicator in the center when processing
-                    if isProcessing {
-                        VStack {
+                }
+                
+                // Full screen overlay for processing indicator
+                if isProcessing {
+                    VStack {
+                        Spacer()
+                        HStack {
                             Spacer()
-                            HStack {
-                                Spacer()
-                                VStack {
-                                    ProgressView()
-                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                        .scaleEffect(1.5)
-                                    Text("Processing...")
-                                        .foregroundColor(.white)
-                                        .padding(.top, 8)
-                                }
-                                Spacer()
+                            VStack {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                    .scaleEffect(1.5)
+                                Text("Processing...")
+                                    .foregroundColor(.white)
+                                    .padding(.top, 8)
                             }
                             Spacer()
                         }
-                        .background(Color.black.opacity(0.7))
-                        .edgesIgnoringSafeArea(.all)
+                        Spacer()
                     }
+                    .background(Color.black.opacity(0.7))
+                    .edgesIgnoringSafeArea(.all)
+                }
+                
+                // Controls overlay positioned at the bottom with semi-transparent background
+                VStack {
+                    Spacer() // Push controls to bottom
                     
-                    ScrollView {
+                    // Controls with semi-transparent background
+                    if !isProcessing {
                         VStack(spacing: 20) {
                             // Brightness slider
                             VStack(alignment: .leading) {
@@ -341,7 +358,10 @@ struct EnhancedImageEditorView: View {
                             .foregroundColor(.white)
                             .padding()
                         }
-                        .padding()
+                        .padding(.vertical)
+                        .background(Color.black.opacity(0.7))
+                        .cornerRadius(15, corners: [.topLeft, .topRight])
+                        .padding(.horizontal, 0)
                     }
                 }
                 .navigationTitle("Edit Receipt")
@@ -399,6 +419,23 @@ struct EnhancedImageEditorView: View {
                 }
             }
         }
+    }
+}
+
+// Extension to apply corner radius to specific corners
+extension View {
+    func cornerRadius(_ radius: CGFloat, corners: UIRectCorner) -> some View {
+        clipShape(RoundedCorner(radius: radius, corners: corners))
+    }
+}
+
+struct RoundedCorner: Shape {
+    var radius: CGFloat = .infinity
+    var corners: UIRectCorner = .allCorners
+
+    func path(in rect: CGRect) -> Path {
+        let path = UIBezierPath(roundedRect: rect, byRoundingCorners: corners, cornerRadii: CGSize(width: radius, height: radius))
+        return Path(path.cgPath)
     }
 }
 
