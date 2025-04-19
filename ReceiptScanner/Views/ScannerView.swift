@@ -43,20 +43,7 @@ struct ScannerView: View {
                                 if let _ = scannedImage {
                                     showingImageEditor = true
                                 }
-                            }
-                        
-                        Button(action: {
-                            saveImageToPhotoLibrary()
-                        }) {
-                            Label("Save to Photos", systemImage: "square.and.arrow.down")
-                                .padding()
-                                .frame(maxWidth: .infinity)
-                                .background(Color.green)
-                                .foregroundColor(.white)
-                                .cornerRadius(10)
-                                .shadow(radius: 2)
-                        }
-                        .padding(.horizontal)
+                            }                                      
                     } else {
                         VStack {
                             Image(systemName: "doc.text.viewfinder")
@@ -66,7 +53,7 @@ struct ScannerView: View {
                                 .foregroundColor(.secondary)
                                 .padding()
                             
-                            Text("No receipt scanned yet")
+                            Text("No receipt or document")
                                 .foregroundColor(.secondary)
                                 .italic()
                                 .padding(.bottom, 20)

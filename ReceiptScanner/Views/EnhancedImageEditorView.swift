@@ -49,54 +49,54 @@ struct EnhancedImageEditorView: View {
                 return
             }
             
-            var currentCIImage = ciImage
+            let context = CIContext()
             
-            // Apply brightness
+            // Apply brightness adjustment
+            var currentImage = ciImage
             if brightness != 0 {
-                let brightnessFilter = CIFilter(name: "CIColorControls")
-                brightnessFilter?.setValue(currentCIImage, forKey: kCIInputImageKey)
-                brightnessFilter?.setValue(brightness, forKey: kCIInputBrightnessKey)
-                if let outputImage = brightnessFilter?.outputImage {
-                    currentCIImage = outputImage
+                let brightnessFilter = CIFilter.colorControls()
+                brightnessFilter.inputImage = currentImage
+                brightnessFilter.brightness = Float(brightness)
+                if let outputImage = brightnessFilter.outputImage {
+                    currentImage = outputImage
                 }
             }
             
-            // Apply contrast
-            if contrast != 1 {
-                let contrastFilter = CIFilter(name: "CIColorControls")
-                contrastFilter?.setValue(currentCIImage, forKey: kCIInputImageKey)
-                contrastFilter?.setValue(contrast, forKey: kCIInputContrastKey)
-                if let outputImage = contrastFilter?.outputImage {
-                    currentCIImage = outputImage
+            // Apply contrast adjustment
+            if contrast != 1.0 {
+                let contrastFilter = CIFilter.colorControls()
+                contrastFilter.inputImage = currentImage
+                contrastFilter.contrast = Float(contrast)
+                if let outputImage = contrastFilter.outputImage {
+                    currentImage = outputImage
                 }
             }
             
-            // Apply sharpness
-            if sharpness > 0 {
-                let sharpenFilter = CIFilter(name: "CISharpenLuminance")
-                sharpenFilter?.setValue(currentCIImage, forKey: kCIInputImageKey)
-                sharpenFilter?.setValue(sharpness, forKey: kCIInputSharpnessKey)
-                if let outputImage = sharpenFilter?.outputImage {
-                    currentCIImage = outputImage
+            // Apply sharpness adjustment
+            if sharpness != 0 {
+                let sharpenFilter = CIFilter.sharpenLuminance()
+                sharpenFilter.inputImage = currentImage
+                sharpenFilter.sharpness = Float(sharpness * 2) // Scale for better control
+                if let outputImage = sharpenFilter.outputImage {
+                    currentImage = outputImage
                 }
             }
             
-            // Apply black and white filter if enabled
+            // Apply black and white filter if selected
             if isBlackAndWhite {
-                let monoFilter = CIFilter(name: "CIPhotoEffectMono")
-                monoFilter?.setValue(currentCIImage, forKey: kCIInputImageKey)
-                if let outputImage = monoFilter?.outputImage {
-                    currentCIImage = outputImage
+                let monoFilter = CIFilter.photoEffectMono()
+                monoFilter.inputImage = currentImage
+                if let outputImage = monoFilter.outputImage {
+                    currentImage = outputImage
                 }
             }
             
             // Convert back to UIImage
-            let context = CIContext()
-            if let cgImage = context.createCGImage(currentCIImage, from: currentCIImage.extent) {
-                let processedImage = UIImage(cgImage: cgImage)
+            if let cgImage = context.createCGImage(currentImage, from: currentImage.extent) {
+                let processedUIImage = UIImage(cgImage: cgImage)
                 
                 DispatchQueue.main.async {
-                    self.processedImage = processedImage
+                    self.processedImage = processedUIImage
                     self.cacheAndDisplayImage()
                     self.isProcessing = false
                 }
@@ -128,7 +128,10 @@ struct EnhancedImageEditorView: View {
                 return
             }
             
+            // Create a new image request handler
             let requestHandler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+            
+            // Create a new request to recognize text
             let request = VNRecognizeTextRequest { request, error in
                 guard error == nil else {
                     print("OCR Error: \(error!.localizedDescription)")
@@ -145,6 +148,7 @@ struct EnhancedImageEditorView: View {
                     return
                 }
                 
+                // Process the recognized text
                 let recognizedText = observations.compactMap { observation in
                     observation.topCandidates(1).first?.string
                 }.joined(separator: "\n")
@@ -171,180 +175,205 @@ struct EnhancedImageEditorView: View {
     }
     
     var body: some View {
-        ZStack {
-            Color.black.edgesIgnoringSafeArea(.all)
-            
-            VStack {
-                if let imageURL = imageURL {
-                    WebImage(url: imageURL)
-                        .resizable()
-                        .indicator(.activity)
-                        .transition(.fade(duration: 0.5))
-                        .scaledToFit()
-                        .padding()
-                } else if let processedImage = processedImage {
-                    ZoomableImageView(image: processedImage)
-                        .padding()
-                } else {
-                    ZoomableImageView(image: image)
-                        .padding()
-                }
-                
-                ScrollView {
-                    VStack(spacing: 20) {
-                        // Brightness slider
-                        VStack(alignment: .leading) {
-                            Text("Brightness: \(String(format: "%.2f", brightness))")
-                                .foregroundColor(.white)
-                            
-                            Slider(value: $brightness, in: -1...1, step: 0.05)
-                                .accentColor(.blue)
-                                .onChange(of: brightness) { _ in
-                                    updateImage()
-                                }
-                        }
-                        .padding(.horizontal)
-                        
-                        // Contrast slider
-                        VStack(alignment: .leading) {
-                            Text("Contrast: \(String(format: "%.2f", contrast))")
-                                .foregroundColor(.white)
-                            
-                            Slider(value: $contrast, in: 0.5...1.5, step: 0.05)
-                                .accentColor(.blue)
-                                .onChange(of: contrast) { _ in
-                                    updateImage()
-                                }
-                        }
-                        .padding(.horizontal)
-                        
-                        // Sharpness slider
-                        VStack(alignment: .leading) {
-                            Text("Sharpness: \(String(format: "%.2f", sharpness))")
-                                .foregroundColor(.white)
-                            
-                            Slider(value: $sharpness, in: 0...2, step: 0.05)
-                                .accentColor(.blue)
-                                .onChange(of: sharpness) { _ in
-                                    updateImage()
-                                }
-                        }
-                        .padding(.horizontal)
-                        
-                        // Black & White toggle
-                        Toggle(isOn: $isBlackAndWhite) {
-                            Text("Black & White")
-                                .foregroundColor(.white)
-                        }
-                        .toggleStyle(SwitchToggleStyle(tint: .blue))
-                        .padding(.horizontal)
-                        .onChange(of: isBlackAndWhite) { _ in
-                            updateImage()
-                        }
-                        
-                        // Action buttons
-                        HStack(spacing: 20) {
-                            /*Button(action: {
-                                print("🔍 Crop button tapped")
-                                showingCropView = true
-                            }) {
-                                VStack {
-                                    Image(systemName: "crop")
-                                        .font(.system(size: 24))
-                                    Text("Crop")
-                                        .font(.caption)
-                                }
-                            }*/
-                            
-                            Button(action: {
-                                resetImage()
-                            }) {
-                                VStack {
-                                    Image(systemName: "arrow.counterclockwise")
-                                        .font(.system(size: 24))
-                                    Text("Reset")
-                                        .font(.caption)
-                                }
-                            }
-                            
-                            /*Button(action: {
-                                performOCR()
-                            }) {
-                                VStack {
-                                    Image(systemName: "text.viewfinder")
-                                        .font(.system(size: 24))
-                                    Text("OCR")
-                                        .font(.caption)
-                                }
-                            }*/
-                            
-                            Button(action: {
-                                showingSaveOptions = true
-                            }) {
-                                VStack {
-                                    Image(systemName: "square.and.arrow.down")
-                                        .font(.system(size: 24))
-                                    Text("Save")
-                                        .font(.caption)
-                                }
-                            }
-                        }
-                        .foregroundColor(.white)
-                        .padding()
-                    }
-                    .padding()
-                }
-            }
-            .navigationTitle("Edit Receipt")
-            .navigationBarTitleDisplayMode(.inline)
-            .onAppear {
-                print("🔍 EnhancedImageEditorView appeared")
-                processedImage = image
-                cacheAndDisplayImage()
-            }
-            .sheet(isPresented: $showingCropView) {
-                let img = processedImage ?? image
-                ImageCropView(image: img) { croppedImg in
-                    if let croppedImg = croppedImg {
-                        print("🔍 Received cropped image with dimensions: \(croppedImg.size.width) x \(croppedImg.size.height)")
-                        self.processedImage = croppedImg
-                        cacheAndDisplayImage()
-                        updateImage()
-                    } else {
-                        print("🔍 Crop operation cancelled or failed")
-                    }
-                }
-            }
-            .sheet(isPresented: $showingOCRResults) {
-                OCRResultView(text: ocrText)
-            }
-            .actionSheet(isPresented: $showingSaveOptions) {
-                ActionSheet(
-                    title: Text("Save Options"),
-                    message: Text("Choose where to save the processed receipt"),
-                    buttons: [
-                        .default(Text("Save to Photos")) {
-                            if let image = processedImage {
-                                UIImageWriteToSavedPhotosAlbum(image, nil, nil, nil)
-                            }
-                        },
-                        .cancel()
-                    ]
-                )
-            }
-            
-            if isProcessing {
-                Color.black.opacity(0.7)
-                    .edgesIgnoringSafeArea(.all)
+        NavigationView {
+            ZStack {
+                Color.black.edgesIgnoringSafeArea(.all)
                 
                 VStack {
-                    ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                        .scaleEffect(1.5)
+                    if isProcessing {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            .scaleEffect(1.5)
+                    }
                     
-                    Text("Processing...")
-                        .foregroundColor(.white)
-                        .padding(.top)
+                    if let imageURL = imageURL {
+                        WebImage(url: imageURL)
+                            .resizable()
+                            .indicator(.activity)
+                            .transition(.fade(duration: 0.5))
+                            .scaledToFit()
+                            .padding()
+                    } else if let processedImage = processedImage {
+                        ZoomableImageView(image: processedImage)
+                            .padding()
+                    } else {
+                        ZoomableImageView(image: image)
+                            .padding()
+                    }
+                    
+                    ScrollView {
+                        VStack(spacing: 20) {
+                            // Brightness slider
+                            VStack(alignment: .leading) {
+                                Text("Brightness: \(String(format: "%.2f", brightness))")
+                                    .foregroundColor(.white)
+                                
+                                Slider(value: $brightness, in: -1...1, step: 0.05)
+                                    .accentColor(.blue)
+                                    .onChange(of: brightness) { _ in
+                                        updateImage()
+                                    }
+                            }
+                            .padding(.horizontal)
+                            
+                            // Contrast slider
+                            VStack(alignment: .leading) {
+                                Text("Contrast: \(String(format: "%.2f", contrast))")
+                                    .foregroundColor(.white)
+                                
+                                Slider(value: $contrast, in: 0.5...1.5, step: 0.05)
+                                    .accentColor(.blue)
+                                    .onChange(of: contrast) { _ in
+                                        updateImage()
+                                    }
+                            }
+                            .padding(.horizontal)
+                            
+                            // Sharpness slider
+                            VStack(alignment: .leading) {
+                                Text("Sharpness: \(String(format: "%.2f", sharpness))")
+                                    .foregroundColor(.white)
+                                
+                                Slider(value: $sharpness, in: 0...1, step: 0.05)
+                                    .accentColor(.blue)
+                                    .onChange(of: sharpness) { _ in
+                                        updateImage()
+                                    }
+                            }
+                            .padding(.horizontal)
+                            
+                            // Black and white toggle
+                            Toggle(isOn: $isBlackAndWhite.animation()) {
+                                Text("Black & White")
+                                    .foregroundColor(.white)
+                            }
+                            .padding(.horizontal)
+                            .onChange(of: isBlackAndWhite) { _ in
+                                updateImage()
+                            }
+                            
+                            // Action buttons
+                            HStack {
+                                Button(action: {
+                                    showingCropView = true
+                                }) {
+                                    VStack {
+                                        Image(systemName: "crop")
+                                            .font(.system(size: 24))
+                                        Text("Crop")
+                                            .font(.caption)
+                                    }
+                                }
+                                
+                                Spacer()
+                                
+                                Button(action: {
+                                    resetImage()
+                                }) {
+                                    VStack {
+                                        Image(systemName: "arrow.counterclockwise")
+                                            .font(.system(size: 24))
+                                        Text("Reset")
+                                            .font(.caption)
+                                    }
+                                }
+                                
+                                Spacer()
+                                
+                                Button(action: {
+                                    performOCR()
+                                }) {
+                                    VStack {
+                                        Image(systemName: "text.viewfinder")
+                                            .font(.system(size: 24))
+                                        Text("OCR")
+                                            .font(.caption)
+                                    }
+                                }
+                                
+                                Spacer()
+                                
+                                Button(action: {
+                                    showingSaveOptions = true
+                                }) {
+                                    VStack {
+                                        Image(systemName: "square.and.arrow.down")
+                                            .font(.system(size: 24))
+                                        Text("Save")
+                                            .font(.caption)
+                                    }
+                                }
+                            }
+                            .foregroundColor(.white)
+                            .padding()
+                        }
+                        .padding()
+                    }
+                }
+                .navigationTitle("Edit Receipt")
+                .navigationBarTitleDisplayMode(.inline)
+                .navigationBarItems(leading: 
+                    Button(action: {
+                        print("🔍 Close button tapped, dismissing editor")
+                        presentationMode.wrappedValue.dismiss()
+                    }) {
+                        Image(systemName: "xmark")
+                            .foregroundColor(.white)
+                            .font(.system(size: 16, weight: .bold))
+                            .padding(8)
+                            .background(Color.gray.opacity(0.6))
+                            .clipShape(Circle())
+                    }
+                )
+                .onAppear {
+                    print("🔍 EnhancedImageEditorView appeared")
+                    processedImage = image
+                    cacheAndDisplayImage()
+                }
+                .sheet(isPresented: $showingCropView) {
+                    let img = processedImage ?? image
+                    ImageCropView(image: img) { croppedImg in
+                        if let croppedImg = croppedImg {
+                            print("🔍 Received cropped image with dimensions: \(croppedImg.size.width) x \(croppedImg.size.height)")
+                            self.processedImage = croppedImg
+                            cacheAndDisplayImage()
+                            updateImage()
+                        } else {
+                            print("🔍 Crop operation cancelled or failed")
+                        }
+                    }
+                }
+                .sheet(isPresented: $showingOCRResults) {
+                    OCRResultView(text: ocrText)
+                }
+                .actionSheet(isPresented: $showingSaveOptions) {
+                    ActionSheet(
+                        title: Text("Save Options"),
+                        message: Text("Choose where to save the processed receipt"),
+                        buttons: [
+                            .default(Text("Save to Photos")) {
+                                if let image = processedImage {
+                                    UIImageWriteToSavedPhotosAlbum(image, nil, nil, nil)
+                                }
+                            },
+                            .cancel()
+                        ]
+                    )
+                }
+                
+                if isProcessing {
+                    Color.black.opacity(0.7)
+                        .edgesIgnoringSafeArea(.all)
+                    
+                    VStack {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            .scaleEffect(1.5)
+                        
+                        Text("Processing...")
+                            .foregroundColor(.white)
+                            .padding(.top)
+                    }
                 }
             }
         }

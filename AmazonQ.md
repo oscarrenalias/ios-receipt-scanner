@@ -19,28 +19,33 @@
    - Added double-tap gesture to toggle between zoomed in/out states
    - Created a reusable `ZoomableImageView` component
 
-4. **Fixed cropping functionality:**
+4. **Improved UI elements:**
+   - Added an "X" close button to dismiss the editor
+   - Styled the close button with a circular background
+   - Ensured proper navigation flow between views
+
+5. **Fixed cropping functionality:**
    - Added proper zoom support with pinch and double-tap gestures
    - Fixed initial zoom level to show the entire image
    - Improved crop rectangle calculation
    - Fixed dismissal after cropping
    - Added detailed logging for debugging
 
-5. **Added debugging print statements:**
+6. **Added debugging print statements:**
    - Added strategic print statements to track execution flow
    - Improved logging for cropping operations
    - Added navigation tracking
 
-6. **Fixed sheet presentation issues:**
+7. **Fixed sheet presentation issues:**
    - Ensured proper sheet presentation for the crop view
    - Added print statements to verify sheet presentation
 
-7. **Improved code organization:**
+8. **Improved code organization:**
    - Simplified class structure
    - Removed duplicate functionality
    - Maintained all features from the original implementation
 
-8. **Fixed build errors:**
+9. **Fixed build errors:**
    - Updated ScannerView to use EnhancedImageEditorView directly
    - Removed all references to old implementations
 
