@@ -17,7 +17,7 @@
    - Added pinch-to-zoom in the main image editor view
    - Added pinch-to-zoom in the crop view
    - Added double-tap gesture to toggle between zoomed in/out states
-   - Created a reusable `ZoomableImageView` component
+   - Created a reusable `ZoomableScrollView` component
 
 4. **Improved UI elements:**
    - Added an "X" close button to dismiss the editor
@@ -60,7 +60,7 @@
 
 - `EnhancedImageEditorView.swift` - Main image editor with all features
 - `ImageCropView.swift` - Dedicated cropping functionality
-- `ZoomableImageView.swift` - Reusable component for zoomable images
+- `ZoomableScrollView.swift` - Reusable component for zoomable images
 - `ContentView.swift` - Main app entry point (modified to use EnhancedImageEditorView)
 - `ScannerView.swift` - Scanner functionality (updated to use EnhancedImageEditorView)
 

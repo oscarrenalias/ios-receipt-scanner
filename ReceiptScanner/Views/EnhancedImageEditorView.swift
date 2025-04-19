@@ -22,6 +22,7 @@ struct EnhancedImageEditorView: View {
     @State private var zoomScale: CGFloat = 1.0
     
     @Environment(\.presentationMode) var presentationMode
+    @Environment(\.colorScheme) private var colorScheme
     
     private func cacheAndDisplayImage() {
         if let processedImage = processedImage {
@@ -185,31 +186,38 @@ struct EnhancedImageEditorView: View {
     
     var body: some View {
         NavigationView {
-            ZStack {
+            ZStack(alignment: .bottom) {
                 Color.black.edgesIgnoringSafeArea(.all)
                 
                 // Main content with zoomable image
-                ZoomableScrollView(currentScale: $zoomScale) {
+                ZoomableScrollView(
+                    minScale: 1.0,
+                    maxScale: 5.0,
+                    currentScale: $zoomScale
+                ) {
                     VStack {
                         if let imageURL = imageURL, !isProcessing {
                             WebImage(url: imageURL)
                                 .resizable()
                                 .scaledToFit()
-                                .padding()
+                                .padding(.top, 20) // Add padding at the top
+                                .padding(.horizontal)
                         } else if let processedImage = processedImage, !isProcessing {
                             Image(uiImage: processedImage)
                                 .resizable()
                                 .scaledToFit()
-                                .padding()
+                                .padding(.top, 20) // Add padding at the top
+                                .padding(.horizontal)
                         } else if !isProcessing {
                             Image(uiImage: image)
                                 .resizable()
                                 .scaledToFit()
-                                .padding()
+                                .padding(.top, 20) // Add padding at the top
+                                .padding(.horizontal)
                         }
                         
                         // Add extra space at the bottom to ensure the image is visible above controls
-                        Spacer(minLength: 300)
+                        Spacer(minLength: 350)
                     }
                 }
                 
@@ -235,13 +243,11 @@ struct EnhancedImageEditorView: View {
                     .edgesIgnoringSafeArea(.all)
                 }
                 
-                // Controls overlay positioned at the bottom with semi-transparent background
-                VStack {
-                    Spacer() // Push controls to bottom
-                    
-                    // Controls with semi-transparent background
+                // Controls section
+                VStack(spacing: 0) {
+                    // Sliders and controls section
                     if !isProcessing {
-                        VStack(spacing: 20) {
+                        VStack(spacing: 15) {
                             // Brightness slider
                             VStack(alignment: .leading) {
                                 Text("Brightness: \(String(format: "%.2f", brightness))")
@@ -302,121 +308,135 @@ struct EnhancedImageEditorView: View {
                                     updateImage()
                                 }
                             }
-                            
-                            // Action buttons
-                            HStack {
-                                Button(action: {
-                                    showingCropView = true
-                                }) {
-                                    VStack {
-                                        Image(systemName: "crop")
-                                            .font(.system(size: 24))
-                                        Text("Crop")
-                                            .font(.caption)
-                                    }
-                                }
-                                
-                                Spacer()
-                                
-                                Button(action: {
-                                    resetImage()
-                                }) {
-                                    VStack {
-                                        Image(systemName: "arrow.counterclockwise")
-                                            .font(.system(size: 24))
-                                        Text("Reset")
-                                            .font(.caption)
-                                    }
-                                }
-                                
-                                Spacer()
-                                
-                                Button(action: {
-                                    performOCR()
-                                }) {
-                                    VStack {
-                                        Image(systemName: "text.viewfinder")
-                                            .font(.system(size: 24))
-                                        Text("OCR")
-                                            .font(.caption)
-                                    }
-                                }
-                                
-                                Spacer()
-                                
-                                Button(action: {
-                                    showingSaveOptions = true
-                                }) {
-                                    VStack {
-                                        Image(systemName: "square.and.arrow.down")
-                                            .font(.system(size: 24))
-                                        Text("Save")
-                                            .font(.caption)
-                                    }
-                                }
-                            }
-                            .foregroundColor(.white)
-                            .padding()
                         }
                         .padding(.vertical)
-                        .background(Color.black.opacity(0.7))
-                        .cornerRadius(15, corners: [.topLeft, .topRight])
-                        .padding(.horizontal, 0)
+                        .background(Color.black.opacity(0.8))
                     }
-                }
-                .navigationTitle("Edit Receipt")
-                .navigationBarTitleDisplayMode(.inline)
-                .navigationBarItems(leading: 
-                    Button(action: {
-                        print("🔍 Close button tapped, dismissing editor")
-                        // Simple dismissal without clearing images
-                        withAnimation(.easeOut(duration: 0.2)) {
-                            presentationMode.wrappedValue.dismiss()
+                    
+                    Divider()
+                    
+                    // Action buttons - styled like the tab bar in ScannerView
+                    HStack(spacing: 0) {
+                        // Crop button
+                        Button(action: {
+                            showingCropView = true
+                        }) {
+                            VStack(spacing: 4) {
+                                Image(systemName: "crop")
+                                    .font(.system(size: 24))
+                                Text("Crop")
+                                    .font(.caption)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
                         }
-                    }) {
-                        Image(systemName: "xmark")
-                            .foregroundColor(.white)
-                            .font(.system(size: 16, weight: .bold))
-                            .padding(8)
-                            .background(Color.gray.opacity(0.6))
-                            .clipShape(Circle())
-                    }
-                )
-                .onAppear {
-                    print("🔍 EnhancedImageEditorView appeared")
-                    processedImage = image
-                    cacheAndDisplayImage()
-                }
-                .sheet(isPresented: $showingCropView) {
-                    let img = processedImage ?? image
-                    ImageCropView(image: img) { croppedImg in
-                        if let croppedImg = croppedImg {
-                            print("🔍 Received cropped image with dimensions: \(croppedImg.size.width) x \(croppedImg.size.height)")
-                            self.processedImage = croppedImg
-                            cacheAndDisplayImage()
-                            updateImage()
-                        } else {
-                            print("🔍 Crop operation cancelled or failed")
+                        .foregroundColor(.blue)
+                        
+                        // Reset button
+                        Button(action: {
+                            resetImage()
+                        }) {
+                            VStack(spacing: 4) {
+                                Image(systemName: "arrow.counterclockwise")
+                                    .font(.system(size: 24))
+                                Text("Reset")
+                                    .font(.caption)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
                         }
+                        .foregroundColor(.blue)
+                        
+                        // OCR button
+                        Button(action: {
+                            performOCR()
+                        }) {
+                            VStack(spacing: 4) {
+                                Image(systemName: "text.viewfinder")
+                                    .font(.system(size: 24))
+                                Text("OCR")
+                                    .font(.caption)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                        }
+                        .foregroundColor(.blue)
+                        
+                        // Save button
+                        Button(action: {
+                            showingSaveOptions = true
+                        }) {
+                            VStack(spacing: 4) {
+                                Image(systemName: "square.and.arrow.down")
+                                    .font(.system(size: 24))
+                                Text("Save")
+                                    .font(.caption)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                        }
+                        .foregroundColor(.blue)
                     }
-                }
-                .sheet(isPresented: $showingOCRResults) {
-                    OCRResultView(text: ocrText)
-                }
-                .actionSheet(isPresented: $showingSaveOptions) {
-                    ActionSheet(
-                        title: Text("Save Options"),
-                        message: Text("Choose where to save the processed receipt"),
-                        buttons: [
-                            .default(Text("Save to Photos")) {
-                                if let image = processedImage {
-                                    UIImageWriteToSavedPhotosAlbum(image, nil, nil, nil)
-                                }
-                            },
-                            .cancel()
-                        ]
+                    .background(
+                        colorScheme == .dark ? 
+                            Color(UIColor.systemBackground).opacity(0.9) : 
+                            Color(UIColor.systemBackground).opacity(0.95)
                     )
+                    .shadow(color: Color.black.opacity(0.1), radius: 5, x: 0, y: -5)
                 }
+                .edgesIgnoringSafeArea(.bottom)
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .navigationBarItems(leading: 
+                Button(action: {
+                    print("🔍 Close button tapped, dismissing editor")
+                    // Simple dismissal without clearing images
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        presentationMode.wrappedValue.dismiss()
+                    }
+                }) {
+                    Image(systemName: "xmark")
+                        .foregroundColor(.white)
+                        .font(.system(size: 16, weight: .bold))
+                        .padding(8)
+                        .background(Color.gray.opacity(0.6))
+                        .clipShape(Circle())
+                }
+            )
+            .onAppear {
+                print("🔍 EnhancedImageEditorView appeared")
+                processedImage = image
+                cacheAndDisplayImage()
+            }
+            .sheet(isPresented: $showingCropView) {
+                let img = processedImage ?? image
+                ImageCropView(image: img) { croppedImg in
+                    if let croppedImg = croppedImg {
+                        print("🔍 Received cropped image with dimensions: \(croppedImg.size.width) x \(croppedImg.size.height)")
+                        self.processedImage = croppedImg
+                        cacheAndDisplayImage()
+                        updateImage()
+                    } else {
+                        print("🔍 Crop operation cancelled or failed")
+                    }
+                }
+            }
+            .sheet(isPresented: $showingOCRResults) {
+                OCRResultView(text: ocrText)
+            }
+            .actionSheet(isPresented: $showingSaveOptions) {
+                ActionSheet(
+                    title: Text("Save Options"),
+                    message: Text("Choose where to save the processed receipt"),
+                    buttons: [
+                        .default(Text("Save to Photos")) {
+                            if let image = processedImage {
+                                UIImageWriteToSavedPhotosAlbum(image, nil, nil, nil)
+                            }
+                        },
+                        .cancel()
+                    ]
+                )
             }
         }
     }
