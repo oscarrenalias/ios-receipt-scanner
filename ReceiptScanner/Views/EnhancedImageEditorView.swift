@@ -261,30 +261,33 @@ struct EnhancedImageEditorView: View {
                     maxScale: 5.0,
                     currentScale: $zoomScale
                 ) {
-                    VStack {
-                        if let imageURL = imageURL, !isProcessing {
-                            WebImage(url: imageURL)
-                                .resizable()
-                                .scaledToFit()
-                                .padding(.top, 20) // Add padding at the top
-                                .padding(.horizontal)
-                                .id(imageURL.absoluteString) // Force view refresh when URL changes
-                        } else if let processedImage = processedImage, !isProcessing {
-                            Image(uiImage: processedImage)
-                                .resizable()
-                                .scaledToFit()
-                                .padding(.top, 20) // Add padding at the top
-                                .padding(.horizontal)
-                        } else if !isProcessing {
-                            Image(uiImage: image)
-                                .resizable()
-                                .scaledToFit()
-                                .padding(.top, 20) // Add padding at the top
-                                .padding(.horizontal)
+                    GeometryReader { geometry in
+                        VStack {
+                            Spacer().frame(height: 40) // Add space at the top
+                            
+                            if let imageURL = imageURL, !isProcessing {
+                                WebImage(url: imageURL)
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: geometry.size.width, height: geometry.size.height * 0.8) // Reduce height to push image up
+                                    .id(imageURL.absoluteString) // Force view refresh when URL changes
+                                    .padding(.bottom, 150) // Add padding at the bottom to push content up
+                            } else if let processedImage = processedImage, !isProcessing {
+                                Image(uiImage: processedImage)
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: geometry.size.width, height: geometry.size.height * 0.8) // Reduce height to push image up
+                                    .padding(.bottom, 150) // Add padding at the bottom to push content up
+                            } else if !isProcessing {
+                                Image(uiImage: image)
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: geometry.size.width, height: geometry.size.height * 0.8) // Reduce height to push image up
+                                    .padding(.bottom, 150) // Add padding at the bottom to push content up
+                            }
+                            
+                            Spacer().frame(height: 120) // Add more space at the bottom to push content up
                         }
-                        
-                        // Add extra space at the bottom to ensure the image is visible above controls
-                        Spacer(minLength: 350)
                     }
                 }
                 
