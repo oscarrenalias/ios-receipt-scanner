@@ -10,10 +10,14 @@
 		0E0481072DB2D9DE004BBFE0 /* SDWebImage in Frameworks */ = {isa = PBXBuildFile; productRef = 0E0481062DB2D9DE004BBFE0 /* SDWebImage */; };
 		0E0481092DB2D9DE004BBFE0 /* SDWebImageMapKit in Frameworks */ = {isa = PBXBuildFile; productRef = 0E0481082DB2D9DE004BBFE0 /* SDWebImageMapKit */; };
 		0E04810C2DB2D9F9004BBFE0 /* SDWebImageSwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = 0E04810B2DB2D9F9004BBFE0 /* SDWebImageSwiftUI */; };
+		0E0481532DB3976B004BBFE0 /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = 0E0481512DB3976B004BBFE0 /* README.md */; };
+		0E0481542DB3976B004BBFE0 /* Roadmap.md in Resources */ = {isa = PBXBuildFile; fileRef = 0E0481522DB3976B004BBFE0 /* Roadmap.md */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		0E0480EA2DB2D78A004BBFE0 /* ReceiptScanner.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ReceiptScanner.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		0E0481512DB3976B004BBFE0 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
+		0E0481522DB3976B004BBFE0 /* Roadmap.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = Roadmap.md; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -41,6 +45,8 @@
 		0E0480E12DB2D78A004BBFE0 = {
 			isa = PBXGroup;
 			children = (
+				0E0481512DB3976B004BBFE0 /* README.md */,
+				0E0481522DB3976B004BBFE0 /* Roadmap.md */,
 				0E0480EC2DB2D78A004BBFE0 /* ReceiptScanner */,
 				0E0480EB2DB2D78A004BBFE0 /* Products */,
 			);
@@ -125,6 +131,8 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				0E0481532DB3976B004BBFE0 /* README.md in Resources */,
+				0E0481542DB3976B004BBFE0 /* Roadmap.md in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -267,6 +275,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = QEZ63CXN26;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "";
@@ -299,6 +308,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = QEZ63CXN26;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "";

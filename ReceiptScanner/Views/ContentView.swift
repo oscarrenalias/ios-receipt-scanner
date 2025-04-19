@@ -109,6 +109,7 @@ struct ContentView: View {
             DispatchQueue.main.async {
                 self.isLoading = false
                 self.navigateToEditor = true
+                print("🔍 Navigating to EnhancedImageEditorView")
             }
         }
     }

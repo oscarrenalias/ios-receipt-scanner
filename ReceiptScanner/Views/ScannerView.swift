@@ -134,6 +134,7 @@ struct ScannerView: View {
                         self.scannedImage = image
                         self.processedImage = nil
                         self.showingImageEditor = true
+                        print("🔍 ScannerView: Showing EnhancedImageEditorView from camera")
                     },
                     onDismiss: {
                         showingCamera = false
@@ -157,6 +158,7 @@ struct ScannerView: View {
                                 self.scannedImage = image
                                 self.processedImage = nil
                                 self.showingImageEditor = true
+                                print("🔍 ScannerView: Showing EnhancedImageEditorView from photo library")
                             }
                         }
                     case .failure(let error):
@@ -166,9 +168,7 @@ struct ScannerView: View {
             }
             .fullScreenCover(isPresented: $showingImageEditor) {
                 if let image = scannedImage {
-                    ImageEditorView(image: image) { editedImage in
-                        self.processedImage = editedImage
-                    }
+                    EnhancedImageEditorView(image: image)
                 }
             }
             .overlay(

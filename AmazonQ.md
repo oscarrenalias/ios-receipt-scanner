@@ -1,0 +1,64 @@
+# Receipt Scanner App - Code Cleanup
+
+## Changes Made
+
+1. **Simplified the project structure:**
+   - Removed redundant image editor implementations
+   - Consolidated cropping functionality into a single implementation
+   - Eliminated conflicting view names
+   - Completely removed old files (no compatibility wrappers)
+
+2. **Retained the most recent implementation with improved features:**
+   - `EnhancedImageEditorView.swift` - Main image editor with all features
+   - `ImageCropView.swift` - Dedicated cropping functionality
+   - Removed old `ImageEditorView.swift` and `SimpleCropView.swift` files
+
+3. **Added zoom functionality to both views:**
+   - Added pinch-to-zoom in the main image editor view
+   - Added pinch-to-zoom in the crop view
+   - Added double-tap gesture to toggle between zoomed in/out states
+   - Created a reusable `ZoomableImageView` component
+
+4. **Fixed cropping functionality:**
+   - Added proper zoom support with pinch and double-tap gestures
+   - Fixed initial zoom level to show the entire image
+   - Improved crop rectangle calculation
+   - Fixed dismissal after cropping
+   - Added detailed logging for debugging
+
+5. **Added debugging print statements:**
+   - Added strategic print statements to track execution flow
+   - Improved logging for cropping operations
+   - Added navigation tracking
+
+6. **Fixed sheet presentation issues:**
+   - Ensured proper sheet presentation for the crop view
+   - Added print statements to verify sheet presentation
+
+7. **Improved code organization:**
+   - Simplified class structure
+   - Removed duplicate functionality
+   - Maintained all features from the original implementation
+
+8. **Fixed build errors:**
+   - Updated ScannerView to use EnhancedImageEditorView directly
+   - Removed all references to old implementations
+
+## File Structure
+
+- `EnhancedImageEditorView.swift` - Main image editor with all features
+- `ImageCropView.swift` - Dedicated cropping functionality
+- `ZoomableImageView.swift` - Reusable component for zoomable images
+- `ContentView.swift` - Main app entry point (modified to use EnhancedImageEditorView)
+- `ScannerView.swift` - Scanner functionality (updated to use EnhancedImageEditorView)
+
+## Usage
+
+The app now uses a single, consistent image editing flow:
+
+1. Capture or select an image
+2. Edit with EnhancedImageEditorView (with zoom capability)
+3. Use ImageCropView for cropping when needed (with zoom capability)
+4. Save or share the processed image
+
+All functionality remains the same, but with a cleaner, more maintainable codebase.
