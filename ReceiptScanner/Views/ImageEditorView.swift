@@ -11,6 +11,12 @@ struct ImageEditorView: View {
     @State private var isBlackAndWhite = false
     @State private var isProcessing = false
     
+    // Zoom and pan states
+    @State private var currentScale: CGFloat = 1.0
+    @State private var previousScale: CGFloat = 1.0
+    @State private var currentOffset: CGSize = .zero
+    @State private var previousOffset: CGSize = .zero
+    
     // For keeping track of the original image
     private let originalImage: UIImage
     
@@ -28,12 +34,62 @@ struct ImageEditorView: View {
             // Black background
             Color.black.edgesIgnoringSafeArea(.all)
             
-            // Image display
+            // Image display with zoom and pan
             GeometryReader { geometry in
-                Image(uiImage: editedImage)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: geometry.size.width, height: geometry.size.height)
+                ZStack {
+                    Image(uiImage: editedImage)
+                        .resizable()
+                        .scaledToFit()
+                        .scaleEffect(currentScale)
+                        .offset(currentOffset)
+                        .gesture(
+                            // Zoom gesture
+                            MagnificationGesture()
+                                .onChanged { value in
+                                    let delta = value / previousScale
+                                    previousScale = value
+                                    
+                                    // Limit zoom scale between 0.5 and 5
+                                    let newScale = currentScale * delta
+                                    currentScale = min(max(newScale, 0.5), 5.0)
+                                }
+                                .onEnded { _ in
+                                    previousScale = 1.0
+                                }
+                                .simultaneously(with:
+                                    // Pan gesture
+                                    DragGesture()
+                                        .onChanged { value in
+                                            // Only allow panning when zoomed in
+                                            if currentScale > 1.0 {
+                                                let newOffset = CGSize(
+                                                    width: previousOffset.width + value.translation.width,
+                                                    height: previousOffset.height + value.translation.height
+                                                )
+                                                
+                                                // Limit panning based on zoom level
+                                                let maxOffset = (currentScale - 1) * geometry.size.width / 2
+                                                currentOffset = CGSize(
+                                                    width: min(max(newOffset.width, -maxOffset), maxOffset),
+                                                    height: min(max(newOffset.height, -maxOffset), maxOffset)
+                                                )
+                                            }
+                                        }
+                                        .onEnded { _ in
+                                            previousOffset = currentOffset
+                                        }
+                                )
+                        )
+                        .onTapGesture(count: 2) {
+                            // Double tap to reset zoom
+                            withAnimation {
+                                currentScale = 1.0
+                                currentOffset = .zero
+                                previousOffset = .zero
+                            }
+                        }
+                }
+                .frame(width: geometry.size.width, height: geometry.size.height)
             }
             
             // Top toolbar with close button
@@ -51,6 +107,23 @@ struct ImageEditorView: View {
                     .padding(.leading, 16)
                     
                     Spacer()
+                    
+                    // Reset zoom button
+                    if currentScale != 1.0 || currentOffset != .zero {
+                        Button(action: {
+                            withAnimation {
+                                currentScale = 1.0
+                                currentOffset = .zero
+                                previousOffset = .zero
+                            }
+                        }) {
+                            Image(systemName: "arrow.up.left.and.down.right.magnifyingglass")
+                                .font(.system(size: 20, weight: .bold))
+                                .foregroundColor(.white)
+                                .padding()
+                                .background(Circle().fill(Color.black.opacity(0.5)))
+                        }
+                    }
                     
                     Button(action: {
                         saveEdits()
@@ -194,6 +267,20 @@ struct ImageEditorView: View {
                 )
             }
             
+            // Zoom indicator
+            if currentScale > 1.0 {
+                VStack {
+                    Text("\(Int(currentScale * 100))%")
+                        .font(.caption)
+                        .foregroundColor(.white)
+                        .padding(6)
+                        .background(Capsule().fill(Color.black.opacity(0.5)))
+                    
+                    Spacer()
+                }
+                .padding(.top, 60)
+            }
+            
             // Processing overlay
             if isProcessing {
                 ZStack {
@@ -291,6 +378,13 @@ struct ImageEditorView: View {
         contrast = 1
         sharpness = 0
         isBlackAndWhite = false
+        
+        // Also reset zoom and pan
+        withAnimation {
+            currentScale = 1.0
+            currentOffset = .zero
+            previousOffset = .zero
+        }
     }
     
     // Save edits and dismiss
