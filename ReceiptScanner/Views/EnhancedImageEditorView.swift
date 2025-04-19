@@ -32,8 +32,12 @@ struct EnhancedImageEditorView: View {
             // Save the image to the temporary URL
             if let imageData = processedImage.jpegData(compressionQuality: 0.9) {
                 try? imageData.write(to: fileURL)
-                self.imageURL = fileURL
-                print("🔍 Image cached at: \(fileURL.path)")
+                
+                // Update the UI on the main thread
+                DispatchQueue.main.async {
+                    self.imageURL = fileURL
+                    print("🔍 Image cached at: \(fileURL.path)")
+                }
             }
         }
     }
@@ -41,68 +45,72 @@ struct EnhancedImageEditorView: View {
     private func updateImage() {
         isProcessing = true
         
-        DispatchQueue.global(qos: .userInitiated).async {
-            guard let ciImage = CIImage(image: processedImage ?? image) else {
-                DispatchQueue.main.async {
-                    isProcessing = false
+        // Delay the processing slightly to avoid rapid consecutive updates
+        // when the user is dragging a slider
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            DispatchQueue.global(qos: .userInitiated).async {
+                guard let ciImage = CIImage(image: processedImage ?? image) else {
+                    DispatchQueue.main.async {
+                        isProcessing = false
+                    }
+                    return
                 }
-                return
-            }
             
-            let context = CIContext()
-            
-            // Apply brightness adjustment
-            var currentImage = ciImage
-            if brightness != 0 {
-                let brightnessFilter = CIFilter.colorControls()
-                brightnessFilter.inputImage = currentImage
-                brightnessFilter.brightness = Float(brightness)
-                if let outputImage = brightnessFilter.outputImage {
-                    currentImage = outputImage
-                }
-            }
-            
-            // Apply contrast adjustment
-            if contrast != 1.0 {
-                let contrastFilter = CIFilter.colorControls()
-                contrastFilter.inputImage = currentImage
-                contrastFilter.contrast = Float(contrast)
-                if let outputImage = contrastFilter.outputImage {
-                    currentImage = outputImage
-                }
-            }
-            
-            // Apply sharpness adjustment
-            if sharpness != 0 {
-                let sharpenFilter = CIFilter.sharpenLuminance()
-                sharpenFilter.inputImage = currentImage
-                sharpenFilter.sharpness = Float(sharpness * 2) // Scale for better control
-                if let outputImage = sharpenFilter.outputImage {
-                    currentImage = outputImage
-                }
-            }
-            
-            // Apply black and white filter if selected
-            if isBlackAndWhite {
-                let monoFilter = CIFilter.photoEffectMono()
-                monoFilter.inputImage = currentImage
-                if let outputImage = monoFilter.outputImage {
-                    currentImage = outputImage
-                }
-            }
-            
-            // Convert back to UIImage
-            if let cgImage = context.createCGImage(currentImage, from: currentImage.extent) {
-                let processedUIImage = UIImage(cgImage: cgImage)
+                let context = CIContext()
                 
-                DispatchQueue.main.async {
-                    self.processedImage = processedUIImage
-                    self.cacheAndDisplayImage()
-                    self.isProcessing = false
+                // Apply brightness adjustment
+                var currentImage = ciImage
+                if brightness != 0 {
+                    let brightnessFilter = CIFilter.colorControls()
+                    brightnessFilter.inputImage = currentImage
+                    brightnessFilter.brightness = Float(brightness)
+                    if let outputImage = brightnessFilter.outputImage {
+                        currentImage = outputImage
+                    }
                 }
-            } else {
-                DispatchQueue.main.async {
-                    self.isProcessing = false
+                
+                // Apply contrast adjustment
+                if contrast != 1.0 {
+                    let contrastFilter = CIFilter.colorControls()
+                    contrastFilter.inputImage = currentImage
+                    contrastFilter.contrast = Float(contrast)
+                    if let outputImage = contrastFilter.outputImage {
+                        currentImage = outputImage
+                    }
+                }
+                
+                // Apply sharpness adjustment
+                if sharpness != 0 {
+                    let sharpenFilter = CIFilter.sharpenLuminance()
+                    sharpenFilter.inputImage = currentImage
+                    sharpenFilter.sharpness = Float(sharpness * 2) // Scale for better control
+                    if let outputImage = sharpenFilter.outputImage {
+                        currentImage = outputImage
+                    }
+                }
+                
+                // Apply black and white filter if selected
+                if isBlackAndWhite {
+                    let monoFilter = CIFilter.photoEffectMono()
+                    monoFilter.inputImage = currentImage
+                    if let outputImage = monoFilter.outputImage {
+                        currentImage = outputImage
+                    }
+                }
+                
+                // Convert back to UIImage
+                if let cgImage = context.createCGImage(currentImage, from: currentImage.extent) {
+                    let processedUIImage = UIImage(cgImage: cgImage)
+                    
+                    DispatchQueue.main.async {
+                        self.processedImage = processedUIImage
+                        self.cacheAndDisplayImage()
+                        self.isProcessing = false
+                    }
+                } else {
+                    DispatchQueue.main.async {
+                        self.isProcessing = false
+                    }
                 }
             }
         }
@@ -180,25 +188,39 @@ struct EnhancedImageEditorView: View {
                 Color.black.edgesIgnoringSafeArea(.all)
                 
                 VStack {
-                    if isProcessing {
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                            .scaleEffect(1.5)
-                    }
-                    
-                    if let imageURL = imageURL {
+                    if let imageURL = imageURL, !isProcessing {
                         WebImage(url: imageURL)
                             .resizable()
-                            .indicator(.activity)
-                            .transition(.fade(duration: 0.5))
                             .scaledToFit()
                             .padding()
-                    } else if let processedImage = processedImage {
+                    } else if let processedImage = processedImage, !isProcessing {
                         ZoomableImageView(image: processedImage)
                             .padding()
-                    } else {
+                    } else if !isProcessing {
                         ZoomableImageView(image: image)
                             .padding()
+                    }
+                    
+                    // Show a single processing indicator in the center when processing
+                    if isProcessing {
+                        VStack {
+                            Spacer()
+                            HStack {
+                                Spacer()
+                                VStack {
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                        .scaleEffect(1.5)
+                                    Text("Processing...")
+                                        .foregroundColor(.white)
+                                        .padding(.top, 8)
+                                }
+                                Spacer()
+                            }
+                            Spacer()
+                        }
+                        .background(Color.black.opacity(0.7))
+                        .edgesIgnoringSafeArea(.all)
                     }
                     
                     ScrollView {
@@ -211,7 +233,10 @@ struct EnhancedImageEditorView: View {
                                 Slider(value: $brightness, in: -1...1, step: 0.05)
                                     .accentColor(.blue)
                                     .onChange(of: brightness) { _ in
-                                        updateImage()
+                                        // Only update if not already processing
+                                        if !isProcessing {
+                                            updateImage()
+                                        }
                                     }
                             }
                             .padding(.horizontal)
@@ -224,7 +249,10 @@ struct EnhancedImageEditorView: View {
                                 Slider(value: $contrast, in: 0.5...1.5, step: 0.05)
                                     .accentColor(.blue)
                                     .onChange(of: contrast) { _ in
-                                        updateImage()
+                                        // Only update if not already processing
+                                        if !isProcessing {
+                                            updateImage()
+                                        }
                                     }
                             }
                             .padding(.horizontal)
@@ -237,7 +265,10 @@ struct EnhancedImageEditorView: View {
                                 Slider(value: $sharpness, in: 0...1, step: 0.05)
                                     .accentColor(.blue)
                                     .onChange(of: sharpness) { _ in
-                                        updateImage()
+                                        // Only update if not already processing
+                                        if !isProcessing {
+                                            updateImage()
+                                        }
                                     }
                             }
                             .padding(.horizontal)
@@ -249,7 +280,10 @@ struct EnhancedImageEditorView: View {
                             }
                             .padding(.horizontal)
                             .onChange(of: isBlackAndWhite) { _ in
-                                updateImage()
+                                // Only update if not already processing
+                                if !isProcessing {
+                                    updateImage()
+                                }
                             }
                             
                             // Action buttons
@@ -362,21 +396,6 @@ struct EnhancedImageEditorView: View {
                             .cancel()
                         ]
                     )
-                }
-                
-                if isProcessing {
-                    Color.black.opacity(0.7)
-                        .edgesIgnoringSafeArea(.all)
-                    
-                    VStack {
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                            .scaleEffect(1.5)
-                        
-                        Text("Processing...")
-                            .foregroundColor(.white)
-                            .padding(.top)
-                    }
                 }
             }
         }

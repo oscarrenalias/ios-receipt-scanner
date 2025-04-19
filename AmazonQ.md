@@ -26,6 +26,7 @@
    - Added instructional text "Tap image to edit and save" below the image
    - Added padding to move the image down from the top of the screen
    - Kept the image visible after editing for further modifications
+   - Fixed screen flashing during image processing with a single, centered progress indicator
 
 5. **Fixed cropping functionality:**
    - Added proper zoom support with pinch and double-tap gestures
@@ -48,6 +49,7 @@
    - Simplified class structure
    - Removed duplicate functionality
    - Maintained all features from the original implementation
+   - Added processing guards to prevent multiple simultaneous image updates
 
 9. **Fixed build errors:**
    - Updated ScannerView to use EnhancedImageEditorView directly
@@ -72,4 +74,4 @@ The app now uses a single, consistent image editing flow:
 4. Save or share the processed image
 5. Return to the scanner view with the image still visible for further editing
 
-All functionality remains the same, but with a cleaner, more maintainable codebase with improved user guidance.
+All functionality remains the same, but with a cleaner, more maintainable codebase with improved user guidance and smoother image processing experience.
