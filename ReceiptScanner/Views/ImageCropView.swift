@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import Vision
 
 struct ImageCropView: View {
     let image: UIImage
@@ -13,6 +14,7 @@ struct ImageCropView: View {
     @State private var isDragging: Bool = false
     @State private var dragStart: CGPoint = .zero
     @State private var rectStart: CGRect = .zero
+    @State private var isProcessing: Bool = true // Show overlay by default
     @Environment(\.presentationMode) var presentationMode
     
     // Corner control size
@@ -118,12 +120,42 @@ struct ImageCropView: View {
                     }
                     .padding(.bottom, 20)
                 }
+                
+                // Overlay for processing indicator
+                if isProcessing {
+                    VStack {
+                        Spacer()
+                        HStack {
+                            Spacer()
+                            VStack {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                    .scaleEffect(1.5)
+                                Text("Processing...")
+                                    .foregroundColor(.white)
+                                    .padding(.top, 8)
+                            }
+                            Spacer()
+                        }
+                        Spacer()
+                    }
+                    .background(Color.black.opacity(0.7))
+                    .edgesIgnoringSafeArea(.all)
+                }
             }
             //.ignoresSafeArea() // Ensure the crop view takes up the full screen
         }
         .navigationBarHidden(true)
         .statusBar(hidden: true)
         .background(Color.black) // Ensure full black background
+        .onAppear {
+            // Only run edge detection if this is the first crop (no initialCropRect)
+            if initialCropRect == nil {
+                detectDocumentEdges()
+            } else {
+                isProcessing = false // No need to show overlay
+            }
+        }
     }
     
     private func performCrop() {
@@ -160,6 +192,106 @@ struct ImageCropView: View {
             presentationMode.wrappedValue.dismiss()
             completion(nil, nil)
         }
+    }
+    
+    private func detectDocumentEdges() {
+        isProcessing = true
+        DispatchQueue.global(qos: .userInitiated).async {
+            guard let cgImage = image.cgImage else {
+                DispatchQueue.main.async {
+                    print("❌ Vision: Could not get CGImage from UIImage")
+                    isProcessing = false
+                }
+                return
+            }
+            let request = VNDetectRectanglesRequest { request, error in
+                DispatchQueue.main.async {
+                    defer { isProcessing = false }
+                    if let error = error {
+                        print("❌ Vision: VNDetectRectanglesRequest failed: \(error.localizedDescription)")
+                        setDefaultCropRect()
+                        return
+                    }
+                    guard let results = request.results as? [VNRectangleObservation], let rect = results.first else {
+                        print("ℹ️ Vision: No rectangles detected, falling back to default crop rect.")
+                        setDefaultCropRect()
+                        return
+                    }
+                    print("✅ Vision: Detected rectangle: ")
+                    print("  topLeft:     \(rect.topLeft)")
+                    print("  topRight:    \(rect.topRight)")
+                    print("  bottomLeft:  \(rect.bottomLeft)")
+                    print("  bottomRight: \(rect.bottomRight)")
+                    print("  boundingBox: \(rect.boundingBox)")
+                    setCropRect(from: rect)
+                }
+            }
+            // Configure request for documents (more permissive)
+            request.minimumAspectRatio = 0.2
+            request.maximumAspectRatio = 1.0
+            request.minimumSize = 0.05
+            request.minimumConfidence = 0.2
+            request.quadratureTolerance = 45.0
+            request.maximumObservations = 1
+            let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+            do {
+                try handler.perform([request])
+            } catch {
+                DispatchQueue.main.async {
+                    setDefaultCropRect()
+                    isProcessing = false
+                }
+            }
+        }
+    }
+
+    private func setDefaultCropRect() {
+        // Use the same logic as before for default 80% rectangle
+        if let frame = getImageFrame(), cropRect == .zero {
+            let cropWidth = frame.width * 0.8
+            let cropHeight = frame.height * 0.8
+            let cropX = frame.minX + (frame.width - cropWidth) / 2
+            let cropY = frame.minY + (frame.height - cropHeight) / 2
+            cropRect = CGRect(x: cropX, y: cropY, width: cropWidth, height: cropHeight)
+        }
+    }
+
+    private func setCropRect(from observation: VNRectangleObservation) {
+        guard let frame = getImageFrame() else { return }
+        // VNRectangleObservation provides normalized coordinates (0,0) is bottom-left
+        // Convert to image coordinates, then to displayed frame
+        let imageWidth = image.size.width
+        let imageHeight = image.size.height
+        func convert(_ point: CGPoint) -> CGPoint {
+            // Convert normalized Vision point to image pixel coordinates
+            CGPoint(x: point.x * imageWidth, y: (1 - point.y) * imageHeight)
+        }
+        let tl = convert(observation.topLeft)
+        let tr = convert(observation.topRight)
+        let bl = convert(observation.bottomLeft)
+        let br = convert(observation.bottomRight)
+        // Bounding box in image coordinates
+        let minX = min(tl.x, tr.x, bl.x, br.x)
+        let maxX = max(tl.x, tr.x, bl.x, br.x)
+        let minY = min(tl.y, tr.y, bl.y, br.y)
+        let maxY = max(tl.y, tr.y, bl.y, br.y)
+        let rectInImage = CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+        // Map to displayed frame
+        let scaleX = frame.width / imageWidth
+        let scaleY = frame.height / imageHeight
+        let cropX = frame.minX + rectInImage.minX * scaleX
+        let cropY = frame.minY + rectInImage.minY * scaleY
+        let cropWidth = rectInImage.width * scaleX
+        let cropHeight = rectInImage.height * scaleY
+        cropRect = CGRect(x: cropX, y: cropY, width: cropWidth, height: cropHeight)
+    }
+
+    private func getImageFrame() -> CGRect? {
+        // Helper to get the current imageFrame (used in main thread)
+        if imageFrame.width > 0 && imageFrame.height > 0 {
+            return imageFrame
+        }
+        return nil
     }
 }
 
