@@ -21,6 +21,7 @@ struct EnhancedImageEditorView: View {
     @State private var imageURL: URL?
     @State private var zoomScale: CGFloat = 1.0
     @State private var rotationAngle: Int = 0 // 0, 90, 180, 270 degrees
+    @State private var isEditingSlider: Bool = false
     
     @Environment(\.presentationMode) var presentationMode
     @Environment(\.colorScheme) private var colorScheme
@@ -323,14 +324,14 @@ struct EnhancedImageEditorView: View {
                                 Text("Brightness: \(String(format: "%.2f", brightness))")
                                     .foregroundColor(.white)
                                 
-                                Slider(value: $brightness, in: -1...1, step: 0.05)
-                                    .accentColor(.blue)
-                                    .onChange(of: brightness) { _ in
-                                        // Only update if not already processing
-                                        if !isProcessing {
-                                            updateImage()
-                                        }
+                                Slider(value: $brightness, in: -1...1, step: 0.01, onEditingChanged: { editing in
+                                    isEditingSlider = editing
+                                    if !editing && !isProcessing {
+                                        // Update image when editing ends
+                                        updateImage()
                                     }
+                                })
+                                .accentColor(.blue)
                             }
                             .padding(.horizontal)
                             
@@ -339,14 +340,14 @@ struct EnhancedImageEditorView: View {
                                 Text("Contrast: \(String(format: "%.2f", contrast))")
                                     .foregroundColor(.white)
                                 
-                                Slider(value: $contrast, in: 0.5...1.5, step: 0.05)
-                                    .accentColor(.blue)
-                                    .onChange(of: contrast) { _ in
-                                        // Only update if not already processing
-                                        if !isProcessing {
-                                            updateImage()
-                                        }
+                                Slider(value: $contrast, in: 0.5...1.5, step: 0.01, onEditingChanged: { editing in
+                                    isEditingSlider = editing
+                                    if !editing && !isProcessing {
+                                        // Update image when editing ends
+                                        updateImage()
                                     }
+                                })
+                                .accentColor(.blue)
                             }
                             .padding(.horizontal)
                             
@@ -355,14 +356,14 @@ struct EnhancedImageEditorView: View {
                                 Text("Sharpness: \(String(format: "%.2f", sharpness))")
                                     .foregroundColor(.white)
                                 
-                                Slider(value: $sharpness, in: 0...1, step: 0.05)
-                                    .accentColor(.blue)
-                                    .onChange(of: sharpness) { _ in
-                                        // Only update if not already processing
-                                        if !isProcessing {
-                                            updateImage()
-                                        }
+                                Slider(value: $sharpness, in: 0...1, step: 0.01, onEditingChanged: { editing in
+                                    isEditingSlider = editing
+                                    if !editing && !isProcessing {
+                                        // Update image when editing ends
+                                        updateImage()
                                     }
+                                })
+                                .accentColor(.blue)
                             }
                             .padding(.horizontal)
                             
@@ -372,7 +373,7 @@ struct EnhancedImageEditorView: View {
                                     .foregroundColor(.white)
                             }
                             .padding(.horizontal)
-                            .onChange(of: isBlackAndWhite) { _ in
+                            .onChange(of: isBlackAndWhite) { _, _ in
                                 // Only update if not already processing
                                 if !isProcessing {
                                     updateImage()
