@@ -26,6 +26,7 @@ struct EnhancedImageEditorView: View {
     @State private var previousCropRect: CGRect? = nil // In image coordinates
     @State private var showingShareSheet = false
     @State private var isPortrait: Bool = UIDevice.current.orientation.isPortrait || UIDevice.current.orientation.isFlat
+    @State private var showControls: Bool = true // Controls are visible by default
     
     @Environment(\.presentationMode) var presentationMode
     @Environment(\.colorScheme) private var colorScheme
@@ -297,29 +298,36 @@ struct EnhancedImageEditorView: View {
                         VStack {
                             Spacer().frame(height: 40) // Add space at the top
                             
-                            if let imageURL = imageURL, !isProcessing {
-                                WebImage(url: imageURL)
-                                    .resizable()
-                                    .scaledToFit()
-                                    .frame(width: geometry.size.width, height: geometry.size.height * 0.8) // Reduce height to push image up
-                                    .id(imageURL.absoluteString) // Force view refresh when URL changes
-                                    .padding(.bottom, 150) // Add padding at the bottom to push content up
-                            } else if let processedImage = processedImage, !isProcessing {
-                                Image(uiImage: processedImage)
-                                    .resizable()
-                                    .scaledToFit()
-                                    .frame(width: geometry.size.width, height: geometry.size.height * 0.8) // Reduce height to push image up
-                                    .padding(.bottom, 150) // Add padding at the bottom to push content up
-                            } else if !isProcessing {
-                                // Always display normalized image
-                                Image(uiImage: image.normalizedToUpOrientation())
-                                    .resizable()
-                                    .scaledToFit()
-                                    .frame(width: geometry.size.width, height: geometry.size.height * 0.8) // Reduce height to push image up
-                                    .padding(.bottom, 150) // Add padding at the bottom to push content up
+                            Group {
+                                if let imageURL = imageURL, !isProcessing {
+                                    WebImage(url: imageURL)
+                                        .resizable()
+                                        .scaledToFit()
+                                        .frame(width: geometry.size.width, height: geometry.size.height * 0.8)
+                                        .id(imageURL.absoluteString)
+                                        .padding(.bottom, 150)
+                                } else if let processedImage = processedImage, !isProcessing {
+                                    Image(uiImage: processedImage)
+                                        .resizable()
+                                        .scaledToFit()
+                                        .frame(width: geometry.size.width, height: geometry.size.height * 0.8)
+                                        .padding(.bottom, 150)
+                                } else if !isProcessing {
+                                    Image(uiImage: image.normalizedToUpOrientation())
+                                        .resizable()
+                                        .scaledToFit()
+                                        .frame(width: geometry.size.width, height: geometry.size.height * 0.8)
+                                        .padding(.bottom, 150)
+                                }
+                            }
+                            .contentShape(Rectangle()) // Make the whole image tappable
+                            .onTapGesture {
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    showControls.toggle()
+                                }
                             }
                             
-                            Spacer().frame(height: 120) // Add more space at the bottom to push content up
+                            Spacer().frame(height: 120)
                         }
                     }
                 }
@@ -347,179 +355,181 @@ struct EnhancedImageEditorView: View {
                 }
                 
                 // Controls section
-                VStack(spacing: 0) {
-                    // Sliders and controls section
-                    if !isProcessing {
-                        VStack(spacing: 15) {
-                            // Brightness slider
-                            VStack(alignment: .leading) {
-                                Text("Brightness: \(String(format: "%.2f", brightness))")
-                                    .foregroundColor(.white)
+                if showControls {
+                    VStack(spacing: 0) {
+                        // Sliders and controls section
+                        if !isProcessing {
+                            VStack(spacing: 15) {
+                                // Brightness slider
+                                VStack(alignment: .leading) {
+                                    Text("Brightness: \(String(format: "%.2f", brightness))")
+                                        .foregroundColor(.white)
+                                    
+                                    Slider(value: $brightness, in: -1...1, step: 0.01, onEditingChanged: { editing in
+                                        isEditingSlider = editing
+                                        if !editing && !isProcessing {
+                                            // Update image when editing ends
+                                            updateImage()
+                                        }
+                                    })
+                                    .accentColor(.blue)
+                                }
+                                .padding(.horizontal)
                                 
-                                Slider(value: $brightness, in: -1...1, step: 0.01, onEditingChanged: { editing in
-                                    isEditingSlider = editing
-                                    if !editing && !isProcessing {
-                                        // Update image when editing ends
+                                // Contrast slider
+                                VStack(alignment: .leading) {
+                                    Text("Contrast: \(String(format: "%.2f", contrast))")
+                                        .foregroundColor(.white)
+                                    
+                                    Slider(value: $contrast, in: 0.5...1.5, step: 0.01, onEditingChanged: { editing in
+                                        isEditingSlider = editing
+                                        if !editing && !isProcessing {
+                                            // Update image when editing ends
+                                            updateImage()
+                                        }
+                                    })
+                                    .accentColor(.blue)
+                                }
+                                .padding(.horizontal)
+                                
+                                // Sharpness slider
+                                VStack(alignment: .leading) {
+                                    Text("Sharpness: \(String(format: "%.2f", sharpness))")
+                                        .foregroundColor(.white)
+                                    
+                                    Slider(value: $sharpness, in: 0...1, step: 0.01, onEditingChanged: { editing in
+                                        isEditingSlider = editing
+                                        if !editing && !isProcessing {
+                                            // Update image when editing ends
+                                            updateImage()
+                                        }
+                                    })
+                                    .accentColor(.blue)
+                                }
+                                .padding(.horizontal)
+                                
+                                // Black and white toggle
+                                Toggle(isOn: $isBlackAndWhite.animation()) {
+                                    Text("Black & White")
+                                        .foregroundColor(.white)
+                                }
+                                .padding(.horizontal)
+                                .onChange(of: isBlackAndWhite) { _, _ in
+                                    // Only update if not already processing
+                                    if (!isProcessing) {
                                         updateImage()
                                     }
-                                })
-                                .accentColor(.blue)
-                            }
-                            .padding(.horizontal)
-                            
-                            // Contrast slider
-                            VStack(alignment: .leading) {
-                                Text("Contrast: \(String(format: "%.2f", contrast))")
-                                    .foregroundColor(.white)
-                                
-                                Slider(value: $contrast, in: 0.5...1.5, step: 0.01, onEditingChanged: { editing in
-                                    isEditingSlider = editing
-                                    if !editing && !isProcessing {
-                                        // Update image when editing ends
-                                        updateImage()
-                                    }
-                                })
-                                .accentColor(.blue)
-                            }
-                            .padding(.horizontal)
-                            
-                            // Sharpness slider
-                            VStack(alignment: .leading) {
-                                Text("Sharpness: \(String(format: "%.2f", sharpness))")
-                                    .foregroundColor(.white)
-                                
-                                Slider(value: $sharpness, in: 0...1, step: 0.01, onEditingChanged: { editing in
-                                    isEditingSlider = editing
-                                    if !editing && !isProcessing {
-                                        // Update image when editing ends
-                                        updateImage()
-                                    }
-                                })
-                                .accentColor(.blue)
-                            }
-                            .padding(.horizontal)
-                            
-                            // Black and white toggle
-                            Toggle(isOn: $isBlackAndWhite.animation()) {
-                                Text("Black & White")
-                                    .foregroundColor(.white)
-                            }
-                            .padding(.horizontal)
-                            .onChange(of: isBlackAndWhite) { _, _ in
-                                // Only update if not already processing
-                                if (!isProcessing) {
-                                    updateImage()
                                 }
                             }
+                            .padding(.vertical)
+                            .background(Color.black.opacity(0.8))
                         }
-                        .padding(.vertical)
-                        .background(Color.black.opacity(0.8))
-                    }
-                    
-                    Divider()
-                    
-                    // Action buttons - styled like the tab bar in ScannerView
-                    HStack(spacing: 0) {
                         
-                        // Rotate button
-                        Button(action: {
-                            rotateImage()
-                        }) {
-                            VStack(spacing: 4) {
-                                Image(systemName: "rotate.right")
-                                    .font(.system(size: 24))
-                                Text("Rotate")
-                                    .font(.caption)
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                        }
-                        .foregroundColor(.blue)
+                        Divider()
                         
-                        // Crop button
-                        Button(action: {
-                            print("🔍 Crop button tapped")
-                            showingCropView = true
-                        }) {
-                            VStack(spacing: 4) {
-                                Image(systemName: "crop")
-                                    .font(.system(size: 24))
-                                Text("Crop")
-                                    .font(.caption)
+                        // Action buttons - styled like the tab bar in ScannerView
+                        HStack(spacing: 0) {
+                            
+                            // Rotate button
+                            Button(action: {
+                                rotateImage()
+                            }) {
+                                VStack(spacing: 4) {
+                                    Image(systemName: "rotate.right")
+                                        .font(.system(size: 24))
+                                    Text("Rotate")
+                                        .font(.caption)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
                             }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                        }
-                        .foregroundColor(.blue)
-                        
-                        // Reset button
-                        Button(action: {
-                            resetImage()
-                        }) {
-                            VStack(spacing: 4) {
-                                Image(systemName: "arrow.counterclockwise")
-                                    .font(.system(size: 24))
-                                Text("Reset")
-                                    .font(.caption)
+                            .foregroundColor(.blue)
+                            
+                            // Crop button
+                            Button(action: {
+                                print("🔍 Crop button tapped")
+                                showingCropView = true
+                            }) {
+                                VStack(spacing: 4) {
+                                    Image(systemName: "crop")
+                                        .font(.system(size: 24))
+                                    Text("Crop")
+                                        .font(.caption)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
                             }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                        }
-                        .foregroundColor(.blue)
-                        
-                        // OCR button
-                        Button(action: {
-                            performOCR()
-                        }) {
-                            VStack(spacing: 4) {
-                                Image(systemName: "text.viewfinder")
-                                    .font(.system(size: 24))
-                                Text("OCR")
-                                    .font(.caption)
+                            .foregroundColor(.blue)
+                            
+                            // Reset button
+                            Button(action: {
+                                resetImage()
+                            }) {
+                                VStack(spacing: 4) {
+                                    Image(systemName: "arrow.counterclockwise")
+                                        .font(.system(size: 24))
+                                    Text("Reset")
+                                        .font(.caption)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
                             }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                        }
-                        .foregroundColor(.blue)
-                        
-                        // Save button
-                        Button(action: {
-                            showingSaveOptions = true
-                        }) {
-                            VStack(spacing: 4) {
-                                Image(systemName: "square.and.arrow.down")
-                                    .font(.system(size: 24))
-                                Text("Save")
-                                    .font(.caption)
+                            .foregroundColor(.blue)
+                            
+                            // OCR button
+                            Button(action: {
+                                performOCR()
+                            }) {
+                                VStack(spacing: 4) {
+                                    Image(systemName: "text.viewfinder")
+                                        .font(.system(size: 24))
+                                    Text("OCR")
+                                        .font(.caption)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
                             }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                        }
-                        .foregroundColor(.blue)
+                            .foregroundColor(.blue)
+                            
+                            // Save button
+                            Button(action: {
+                                showingSaveOptions = true
+                            }) {
+                                VStack(spacing: 4) {
+                                    Image(systemName: "square.and.arrow.down")
+                                        .font(.system(size: 24))
+                                    Text("Save")
+                                        .font(.caption)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                            }
+                            .foregroundColor(.blue)
 
-                        // Share button
-                        Button(action: {
-                            showingShareSheet = true
-                        }) {
-                            VStack(spacing: 4) {
-                                Image(systemName: "square.and.arrow.up")
-                                    .font(.system(size: 24))
-                                Text("Share")
-                                    .font(.caption)
+                            // Share button
+                            Button(action: {
+                                showingShareSheet = true
+                            }) {
+                                VStack(spacing: 4) {
+                                    Image(systemName: "square.and.arrow.up")
+                                        .font(.system(size: 24))
+                                    Text("Share")
+                                        .font(.caption)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
                             }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
+                            .foregroundColor(.blue)
                         }
-                        .foregroundColor(.blue)
+                        .background(
+                            colorScheme == .dark ? 
+                                Color(UIColor.systemBackground).opacity(0.9) : 
+                                Color(UIColor.systemBackground).opacity(0.95)
+                        )
+                        .shadow(color: Color.black.opacity(0.1), radius: 5, x: 0, y: -5)
                     }
-                    .background(
-                        colorScheme == .dark ? 
-                            Color(UIColor.systemBackground).opacity(0.9) : 
-                            Color(UIColor.systemBackground).opacity(0.95)
-                    )
-                    .shadow(color: Color.black.opacity(0.1), radius: 5, x: 0, y: -5)
+                    .edgesIgnoringSafeArea(.bottom)
                 }
-                .edgesIgnoringSafeArea(.bottom)
             }
             .navigationBarTitleDisplayMode(.inline)
             .navigationBarItems(leading: 
