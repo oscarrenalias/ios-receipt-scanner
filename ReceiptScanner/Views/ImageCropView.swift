@@ -129,45 +129,33 @@ struct ImageCropView: View {
     private func performCrop() {
         print("🔍 Performing crop with rect: \(cropRect)")
         
+        // Normalize image orientation to .up before cropping
+        let normalizedImage = image.normalizedToUpOrientation()
+        
         // Convert crop rect from display coordinates to image coordinates
         let imageDisplayFrame = imageFrame
-        
-        // Calculate the scale between the displayed image and the actual image
-        let scaleX = image.size.width / imageDisplayFrame.width
-        let scaleY = image.size.height / imageDisplayFrame.height
-        
-        // Calculate the crop rect in the image's coordinate space
+        let scaleX = normalizedImage.size.width / imageDisplayFrame.width
+        let scaleY = normalizedImage.size.height / imageDisplayFrame.height
         let cropX = (cropRect.minX - imageDisplayFrame.minX) * scaleX
         let cropY = (cropRect.minY - imageDisplayFrame.minY) * scaleY
         let cropWidth = cropRect.width * scaleX
         let cropHeight = cropRect.height * scaleY
-        
         let imageCropRect = CGRect(x: cropX, y: cropY, width: cropWidth, height: cropHeight)
-        
         print("🔍 Image crop rect: \(imageCropRect)")
-        print("🔍 Original image size: \(image.size.width) x \(image.size.height)")
-        
-        // Ensure crop rect is within image bounds
+        print("🔍 Normalized image size: \(normalizedImage.size.width) x \(normalizedImage.size.height)")
         let validCropRect = CGRect(
-            x: max(0, min(imageCropRect.minX, image.size.width - 1)),
-            y: max(0, min(imageCropRect.minY, image.size.height - 1)),
-            width: min(imageCropRect.width, image.size.width - imageCropRect.minX),
-            height: min(imageCropRect.height, image.size.height - imageCropRect.minY)
+            x: max(0, min(imageCropRect.minX, normalizedImage.size.width - 1)),
+            y: max(0, min(imageCropRect.minY, normalizedImage.size.height - 1)),
+            width: min(imageCropRect.width, normalizedImage.size.width - imageCropRect.minX),
+            height: min(imageCropRect.height, normalizedImage.size.height - imageCropRect.minY)
         )
-        
         print("🔍 Valid crop rect: \(validCropRect)")
-        
-        // Perform the actual cropping
-        if let cgImage = image.cgImage?.cropping(to: validCropRect) {
-            let croppedImage = UIImage(cgImage: cgImage, scale: image.scale, orientation: image.imageOrientation)
-            
+        if let cgImage = normalizedImage.cgImage?.cropping(to: validCropRect) {
+            let croppedImage = UIImage(cgImage: cgImage, scale: normalizedImage.scale, orientation: .up)
             print("🔍 Cropping successful, new image size: \(croppedImage.size.width) x \(croppedImage.size.height)")
-            
-            // Return the cropped image
             presentationMode.wrappedValue.dismiss()
             completion(croppedImage, validCropRect)
         } else {
-            // Cropping failed
             print("❌ Cropping failed")
             presentationMode.wrappedValue.dismiss()
             completion(nil, nil)
@@ -355,5 +343,18 @@ struct CropOverlayView: View {
         if newRect.minY < imageFrame.minY { newRect.origin.y = imageFrame.minY }
         if newRect.maxY > imageFrame.maxY { newRect.size.height = imageFrame.maxY - newRect.minY }
         rect = newRect
+    }
+}
+
+// MARK: - UIImage Orientation Normalization Helper
+private extension UIImage {
+    func normalizedToUpOrientation() -> UIImage {
+        if imageOrientation == .up {
+            return self
+        }
+        UIGraphicsBeginImageContextWithOptions(size, false, scale)
+        defer { UIGraphicsEndImageContext() }
+        draw(in: CGRect(origin: .zero, size: size))
+        return UIGraphicsGetImageFromCurrentImageContext() ?? self
     }
 }
