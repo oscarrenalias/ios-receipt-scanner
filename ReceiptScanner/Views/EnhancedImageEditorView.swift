@@ -310,7 +310,8 @@ struct EnhancedImageEditorView: View {
                                     .frame(width: geometry.size.width, height: geometry.size.height * 0.8) // Reduce height to push image up
                                     .padding(.bottom, 150) // Add padding at the bottom to push content up
                             } else if !isProcessing {
-                                Image(uiImage: image)
+                                // Always display normalized image
+                                Image(uiImage: image.normalizedToUpOrientation())
                                     .resizable()
                                     .scaledToFit()
                                     .frame(width: geometry.size.width, height: geometry.size.height * 0.8) // Reduce height to push image up
@@ -538,9 +539,8 @@ struct EnhancedImageEditorView: View {
             )
             .onAppear {
                 print("🔍 EnhancedImageEditorView appeared")
-                // Store the original image when the view appears
-                // Normalize the image to avoid SDR/HDR display issues
-                let normalized = normalizedImage(image)
+                // Normalize the image for editing and display
+                let normalized = image.normalizedToUpOrientation()
                 originalImage = normalized
                 processedImage = normalized
                 cacheAndDisplayImage()

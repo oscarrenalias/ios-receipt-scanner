@@ -33,7 +33,9 @@ struct ImageCropView: View {
                 
                 // Image and overlay in a ZStack, overlay absolutely positioned over imageFrame
                 ZStack(alignment: .topLeading) {
-                    Image(uiImage: image)
+                    // Always normalize image to .up for both display and cropping
+                    let normalizedImage = image.normalizedToUpOrientation()
+                    Image(uiImage: normalizedImage)
                         .resizable()
                         .scaledToFit()
                         .background(
@@ -47,8 +49,8 @@ struct ImageCropView: View {
                                         imageSize = CGSize(width: frame.width, height: frame.height)
                                         if quad.topLeft == .zero && frame.width > 0 && frame.height > 0 {
                                             if let initialCropRect = initialCropRect {
-                                                let scaleX = frame.width / image.size.width
-                                                let scaleY = frame.height / image.size.height
+                                                let scaleX = frame.width / normalizedImage.size.width
+                                                let scaleY = frame.height / normalizedImage.size.height
                                                 let cropX = frame.minX + initialCropRect.minX * scaleX
                                                 let cropY = frame.minY + initialCropRect.minY * scaleY
                                                 let cropWidth = initialCropRect.width * scaleX
@@ -188,6 +190,7 @@ struct ImageCropView: View {
     
     private func performCrop() {
         guard quad.topLeft != .zero else { return }
+        // Use the same normalized image as displayed
         let normalizedImage = image.normalizedToUpOrientation()
         let imageDisplayFrame = imageFrame
         let scaleX = normalizedImage.size.width / imageDisplayFrame.width
@@ -408,18 +411,5 @@ struct QuadCropOverlayView: View {
             x: min(max(point.x, imageFrame.minX), imageFrame.maxX),
             y: min(max(point.y, imageFrame.minY), imageFrame.maxY)
         )
-    }
-}
-
-// MARK: - UIImage Orientation Normalization Helper
-private extension UIImage {
-    func normalizedToUpOrientation() -> UIImage {
-        if imageOrientation == .up {
-            return self
-        }
-        UIGraphicsBeginImageContextWithOptions(size, false, scale)
-        defer { UIGraphicsEndImageContext() }
-        draw(in: CGRect(origin: .zero, size: size))
-        return UIGraphicsGetImageFromCurrentImageContext() ?? self
     }
 }
