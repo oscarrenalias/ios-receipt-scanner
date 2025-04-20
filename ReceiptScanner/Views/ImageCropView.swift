@@ -1,450 +1,359 @@
 import SwiftUI
 import UIKit
-import AVFoundation
 
 struct ImageCropView: View {
     let image: UIImage
-    let onCropComplete: (UIImage?) -> Void
+    let initialCropRect: CGRect?
+    let completion: (UIImage?, CGRect?) -> Void
     
-    init(image: UIImage, onCropComplete: @escaping (UIImage?) -> Void) {
-        self.image = image
-        self.onCropComplete = onCropComplete
-        print("🔍 ImageCropView initialized with image: \(image.size.width) x \(image.size.height)")
+    @State private var cropRect: CGRect = .zero
+    @State private var viewSize: CGSize = .zero
+    @State private var imageSize: CGSize = .zero
+    @State private var imageFrame: CGRect = .zero
+    @State private var isDragging: Bool = false
+    @State private var dragStart: CGPoint = .zero
+    @State private var rectStart: CGRect = .zero
+    @Environment(\.presentationMode) var presentationMode
+    
+    // Corner control size
+    private let cornerSize: CGFloat = 44
+    
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                Color.black.edgesIgnoringSafeArea(.all)
+                
+                // Image and overlay in a ZStack, overlay absolutely positioned over imageFrame
+                ZStack(alignment: .topLeading) {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFit()
+                        .background(
+                            GeometryReader { imageGeometry in
+                                Color.clear
+                                    .onAppear {
+                                        let frame = imageGeometry.frame(in: .local)
+                                        print("🔍 imageFrame onAppear: \(frame)")
+                                        imageFrame = frame
+                                        viewSize = geometry.size
+                                        imageSize = CGSize(width: frame.width, height: frame.height)
+                                        if cropRect == .zero && frame.width > 0 && frame.height > 0 {
+                                            if let initialCropRect = initialCropRect {
+                                                let scaleX = frame.width / image.size.width
+                                                let scaleY = frame.height / image.size.height
+                                                let cropX = frame.minX + initialCropRect.minX * scaleX
+                                                let cropY = frame.minY + initialCropRect.minY * scaleY
+                                                let cropWidth = initialCropRect.width * scaleX
+                                                let cropHeight = initialCropRect.height * scaleY
+                                                cropRect = CGRect(x: cropX, y: cropY, width: cropWidth, height: cropHeight)
+                                            } else {
+                                                let cropWidth = frame.width * 0.8
+                                                let cropHeight = frame.height * 0.8
+                                                let cropX = frame.minX + (frame.width - cropWidth) / 2
+                                                let cropY = frame.minY + (frame.height - cropHeight) / 2
+                                                cropRect = CGRect(x: cropX, y: cropY, width: cropWidth, height: cropHeight)
+                                            }
+                                            print("🔍 cropRect initialized: \(cropRect)")
+                                        }
+                                    }
+                            }
+                        )
+                    // Overlay absolutely positioned over the imageFrame
+                    if imageFrame.width > 0 && imageFrame.height > 0 && cropRect.width > 0 && cropRect.height > 0 {
+                        CropOverlayView(
+                            rect: $cropRect,
+                            imageFrame: imageFrame,
+                            cornerSize: cornerSize,
+                            isDragging: $isDragging,
+                            dragStart: $dragStart,
+                            rectStart: $rectStart
+                        )
+                        .frame(width: imageFrame.width, height: imageFrame.height)
+                        .offset(x: imageFrame.minX, y: imageFrame.minY)
+                        .allowsHitTesting(true)
+                    }
+                }
+                
+                // Top toolbar
+                VStack {
+                    HStack {
+                        Button(action: {
+                            // Cancel cropping
+                            print("🔍 Crop cancelled")
+                            presentationMode.wrappedValue.dismiss()
+                            completion(nil, nil)
+                        }) {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 20, weight: .bold))
+                                .foregroundColor(.white)
+                                .padding(8)
+                                .background(Color.gray.opacity(0.6))
+                                .clipShape(Circle())
+                        }
+                        .padding(.leading)
+                        
+                        Spacer()
+                    }
+                    .padding(.top, 10)
+                    
+                    Spacer()
+                    
+                    // Bottom toolbar
+                    HStack {
+                        Spacer()
+                        
+                        Button(action: {
+                            // Perform cropping
+                            performCrop()
+                        }) {
+                            Text("Crop")
+                                .fontWeight(.bold)
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 24)
+                                .padding(.vertical, 12)
+                                .background(Color.blue)
+                                .cornerRadius(8)
+                        }
+                        .padding(.trailing)
+                    }
+                    .padding(.bottom, 20)
+                }
+            }
+            //.ignoresSafeArea() // Ensure the crop view takes up the full screen
+        }
+        .navigationBarHidden(true)
+        .statusBar(hidden: true)
+        .background(Color.black) // Ensure full black background
+    }
+    
+    private func performCrop() {
+        print("🔍 Performing crop with rect: \(cropRect)")
+        
+        // Convert crop rect from display coordinates to image coordinates
+        let imageDisplayFrame = imageFrame
+        
+        // Calculate the scale between the displayed image and the actual image
+        let scaleX = image.size.width / imageDisplayFrame.width
+        let scaleY = image.size.height / imageDisplayFrame.height
+        
+        // Calculate the crop rect in the image's coordinate space
+        let cropX = (cropRect.minX - imageDisplayFrame.minX) * scaleX
+        let cropY = (cropRect.minY - imageDisplayFrame.minY) * scaleY
+        let cropWidth = cropRect.width * scaleX
+        let cropHeight = cropRect.height * scaleY
+        
+        let imageCropRect = CGRect(x: cropX, y: cropY, width: cropWidth, height: cropHeight)
+        
+        print("🔍 Image crop rect: \(imageCropRect)")
+        print("🔍 Original image size: \(image.size.width) x \(image.size.height)")
+        
+        // Ensure crop rect is within image bounds
+        let validCropRect = CGRect(
+            x: max(0, min(imageCropRect.minX, image.size.width - 1)),
+            y: max(0, min(imageCropRect.minY, image.size.height - 1)),
+            width: min(imageCropRect.width, image.size.width - imageCropRect.minX),
+            height: min(imageCropRect.height, image.size.height - imageCropRect.minY)
+        )
+        
+        print("🔍 Valid crop rect: \(validCropRect)")
+        
+        // Perform the actual cropping
+        if let cgImage = image.cgImage?.cropping(to: validCropRect) {
+            let croppedImage = UIImage(cgImage: cgImage, scale: image.scale, orientation: image.imageOrientation)
+            
+            print("🔍 Cropping successful, new image size: \(croppedImage.size.width) x \(croppedImage.size.height)")
+            
+            // Return the cropped image
+            presentationMode.wrappedValue.dismiss()
+            completion(croppedImage, validCropRect)
+        } else {
+            // Cropping failed
+            print("❌ Cropping failed")
+            presentationMode.wrappedValue.dismiss()
+            completion(nil, nil)
+        }
+    }
+}
+
+// Preference key to get the image frame
+struct ImageFramePreferenceKey: PreferenceKey {
+    static var defaultValue: CGRect = .zero
+    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
+        value = nextValue()
+    }
+}
+
+struct CropOverlayView: View {
+    @Binding var rect: CGRect
+    let imageFrame: CGRect
+    let cornerSize: CGFloat
+    @Binding var isDragging: Bool
+    @Binding var dragStart: CGPoint
+    @Binding var rectStart: CGRect
+    @State private var activeCorner: Corner? = nil
+    @State private var cornerDragStart: CGPoint = .zero
+    @State private var cornerRectStart: CGRect = .zero
+    
+    enum Corner: Hashable {
+        case topLeft, topRight, bottomLeft, bottomRight
     }
     
     var body: some View {
-        ImageCropperRepresentable(image: image, onCropComplete: onCropComplete)
-            .edgesIgnoringSafeArea(.all)
-            .onAppear {
-                print("🔍 ImageCropView appeared with image dimensions: \(image.size.width) x \(image.size.height)")
+        ZStack {
+            // Semi-transparent overlay outside crop area
+            Rectangle()
+                .fill(Color.black.opacity(0.5))
+                .mask(
+                    Rectangle()
+                        .frame(width: imageFrame.width, height: imageFrame.height)
+                        .position(x: imageFrame.midX, y: imageFrame.midY)
+                        .overlay(
+                            Rectangle()
+                                .frame(width: rect.width, height: rect.height)
+                                .position(x: rect.midX, y: rect.midY)
+                                .blendMode(.destinationOut)
+                        )
+                )
+            
+            // Crop rectangle border
+            Rectangle()
+                .stroke(Color.white, lineWidth: 1)
+                .frame(width: rect.width, height: rect.height)
+                .position(x: rect.midX, y: rect.midY)
+                // Make the entire rectangle draggable, but only if no corner is being dragged
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { value in
+                            // Only allow rectangle dragging if no corner is active
+                            if activeCorner == nil {
+                                if !isDragging {
+                                    isDragging = true
+                                    dragStart = value.location
+                                    rectStart = rect
+                                    print("🔍 Started dragging rectangle at \(dragStart)")
+                                }
+                                
+                                let translation = CGPoint(
+                                    x: value.location.x - dragStart.x,
+                                    y: value.location.y - dragStart.y
+                                )
+                                
+                                // Calculate new rect position
+                                var newRect = rectStart
+                                newRect.origin.x += translation.x
+                                newRect.origin.y += translation.y
+                                
+                                // Constrain to image bounds
+                                if newRect.minX < imageFrame.minX {
+                                    newRect.origin.x = imageFrame.minX
+                                }
+                                if newRect.maxX > imageFrame.maxX {
+                                    newRect.origin.x = imageFrame.maxX - newRect.width
+                                }
+                                if newRect.minY < imageFrame.minY {
+                                    newRect.origin.y = imageFrame.minY
+                                }
+                                if newRect.maxY > imageFrame.maxY {
+                                    newRect.origin.y = imageFrame.maxY - newRect.height
+                                }
+                                
+                                rect = newRect
+                            }
+                        }
+                        .onEnded { _ in
+                            isDragging = false
+                            print("🔍 Finished dragging rectangle")
+                        }
+                )
+            
+            // Corner controls - make them larger and more visible
+            Group {
+                // Top-left corner
+                cornerControl(at: CGPoint(x: rect.minX, y: rect.minY), corner: .topLeft)
+                
+                // Top-right corner
+                cornerControl(at: CGPoint(x: rect.maxX, y: rect.minY), corner: .topRight)
+                
+                // Bottom-left corner
+                cornerControl(at: CGPoint(x: rect.minX, y: rect.maxY), corner: .bottomLeft)
+                
+                // Bottom-right corner
+                cornerControl(at: CGPoint(x: rect.maxX, y: rect.maxY), corner: .bottomRight)
             }
-    }
-}
-
-struct ImageCropperRepresentable: UIViewControllerRepresentable {
-    let image: UIImage
-    let onCropComplete: (UIImage?) -> Void
-    
-    init(image: UIImage, onCropComplete: @escaping (UIImage?) -> Void) {
-        self.image = image
-        self.onCropComplete = onCropComplete
-        print("🔍 ImageCropperRepresentable initialized")
-    }
-    
-    func makeUIViewController(context: Context) -> UIImageCropperViewController {
-        print("🔍 Creating UIImageCropperViewController")
-        let controller = UIImageCropperViewController(image: image)
-        controller.delegate = context.coordinator
-        return controller
-    }
-    
-    func updateUIViewController(_ uiViewController: UIImageCropperViewController, context: Context) {
-        print("🔍 Updating UIImageCropperViewController")
-    }
-    
-    func makeCoordinator() -> Coordinator {
-        print("🔍 Creating Coordinator")
-        return Coordinator(self)
-    }
-    
-    class Coordinator: NSObject, UIImageCropperViewControllerDelegate {
-        let parent: ImageCropperRepresentable
-        
-        init(_ parent: ImageCropperRepresentable) {
-            self.parent = parent
-            super.init()
-            print("🔍 Coordinator initialized")
-        }
-        
-        func imageCropperViewController(_ controller: UIImageCropperViewController, didFinishCroppingImage image: UIImage) {
-            print("🔍 Coordinator received cropped image with dimensions: \(image.size.width) x \(image.size.height)")
-            parent.onCropComplete(image)
-        }
-        
-        func imageCropperViewControllerDidCancel(_ controller: UIImageCropperViewController) {
-            print("🔍 Coordinator received cancel event")
-            parent.onCropComplete(nil)
         }
     }
-}
-
-protocol UIImageCropperViewControllerDelegate: AnyObject {
-    func imageCropperViewController(_ controller: UIImageCropperViewController, didFinishCroppingImage image: UIImage)
-    func imageCropperViewControllerDidCancel(_ controller: UIImageCropperViewController)
-}
-
-class UIImageCropperViewController: UIViewController {
-    weak var delegate: UIImageCropperViewControllerDelegate?
-    private let imageView = UIImageView()
-    private let scrollView = UIScrollView()
-    private let cropOverlayView = CropOverlayView()
-    private let originalImage: UIImage
     
-    // UI elements
-    private let topBar = UIView()
-    private let bottomBar = UIView()
-    private var cancelButton = UIButton(type: .system)
-    private var doneButton = UIButton(type: .system)
-    
-    // For tracking zoom and pan
-    private var currentZoomScale: CGFloat = 1.0
-    private var currentContentOffset: CGPoint = .zero
-    
-    init(image: UIImage) {
-        self.originalImage = image
-        super.init(nibName: nil, bundle: nil)
-        print("🔍 UIImageCropperViewController initializing with image: \(image.size.width) x \(image.size.height)")
-    }
-    
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-    
-    override func viewDidLoad() {
-        super.viewDidLoad()
-        setupUI()
-        print("🔍 UIImageCropperViewController viewDidLoad")
-    }
-    
-    override func viewDidLayoutSubviews() {
-        super.viewDidLayoutSubviews()
-        updateCropOverlayFrame()
-        print("🔍 UIImageCropperViewController viewDidLayoutSubviews")
-    }
-    
-    private func setupUI() {
-        view.backgroundColor = .black
-        
-        // Setup scroll view
-        scrollView.delegate = self
-        scrollView.showsVerticalScrollIndicator = false
-        scrollView.showsHorizontalScrollIndicator = false
-        scrollView.alwaysBounceVertical = true
-        scrollView.alwaysBounceHorizontal = true
-        scrollView.clipsToBounds = false
-        scrollView.contentInsetAdjustmentBehavior = .never
-        scrollView.bouncesZoom = true
-        view.addSubview(scrollView)
-        
-        // Setup image view
-        imageView.image = originalImage
-        imageView.contentMode = .scaleAspectFit
-        scrollView.addSubview(imageView)
-        
-        // Setup crop overlay
-        cropOverlayView.backgroundColor = .clear
-        view.addSubview(cropOverlayView)
-        
-        // Setup top bar
-        topBar.backgroundColor = UIColor.black.withAlphaComponent(0.7)
-        view.addSubview(topBar)
-        
-        // Setup bottom bar
-        bottomBar.backgroundColor = UIColor.black.withAlphaComponent(0.7)
-        view.addSubview(bottomBar)
-        
-        // Setup buttons
-        let buttonStack = UIStackView()
-        buttonStack.axis = .horizontal
-        buttonStack.distribution = .equalSpacing
-        buttonStack.alignment = .center
-        bottomBar.addSubview(buttonStack)
-        
-        cancelButton.setTitle("Cancel", for: .normal)
-        cancelButton.tintColor = .white
-        cancelButton.titleLabel?.font = UIFont.systemFont(ofSize: 18)
-        cancelButton.addTarget(self, action: #selector(cancelTapped), for: .touchUpInside)
-        
-        doneButton.setTitle("CROP IMAGE", for: .normal)
-        doneButton.tintColor = .white
-        doneButton.titleLabel?.font = UIFont.systemFont(ofSize: 18, weight: .bold)
-        doneButton.addTarget(self, action: #selector(doneTapped), for: .touchUpInside)
-        
-        buttonStack.addArrangedSubview(cancelButton)
-        buttonStack.addArrangedSubview(doneButton)
-        
-        // Add double tap gesture for zoom
-        let doubleTapGesture = UITapGestureRecognizer(target: self, action: #selector(handleDoubleTap(_:)))
-        doubleTapGesture.numberOfTapsRequired = 2
-        scrollView.addGestureRecognizer(doubleTapGesture)
-        
-        // Layout constraints
-        scrollView.translatesAutoresizingMaskIntoConstraints = false
-        imageView.translatesAutoresizingMaskIntoConstraints = false
-        cropOverlayView.translatesAutoresizingMaskIntoConstraints = false
-        topBar.translatesAutoresizingMaskIntoConstraints = false
-        bottomBar.translatesAutoresizingMaskIntoConstraints = false
-        buttonStack.translatesAutoresizingMaskIntoConstraints = false
-        
-        NSLayoutConstraint.activate([
-            topBar.topAnchor.constraint(equalTo: view.topAnchor),
-            topBar.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            topBar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            topBar.heightAnchor.constraint(equalToConstant: 44 + (UIApplication.shared.windows.first?.safeAreaInsets.top ?? 0)),
+    @ViewBuilder
+    private func cornerControl(at position: CGPoint, corner: Corner) -> some View {
+        // Make corners more visible with a larger touch area
+        ZStack {
+            // Larger transparent touch area
+            Circle()
+                .fill(Color.white.opacity(0.001)) // Nearly invisible but still detectable for touch
+                .frame(width: cornerSize * 2, height: cornerSize * 2)
             
-            bottomBar.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-            bottomBar.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            bottomBar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            bottomBar.heightAnchor.constraint(equalToConstant: 64 + (UIApplication.shared.windows.first?.safeAreaInsets.bottom ?? 0)),
-            
-            buttonStack.centerXAnchor.constraint(equalTo: bottomBar.centerXAnchor),
-            buttonStack.topAnchor.constraint(equalTo: bottomBar.topAnchor, constant: 8),
-            buttonStack.widthAnchor.constraint(equalTo: bottomBar.widthAnchor, constant: -32),
-            
-            scrollView.topAnchor.constraint(equalTo: topBar.bottomAnchor),
-            scrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            scrollView.bottomAnchor.constraint(equalTo: bottomBar.topAnchor)
-        ])
-        
-        // Initial setup for image view and scroll view
-        updateImageViewAndScrollView()
-    }
-    
-    private func updateImageViewAndScrollView() {
-        // Reset zoom scale
-        scrollView.zoomScale = 1.0
-        currentZoomScale = 1.0
-        
-        // Calculate the frame that will fit the image with aspect ratio
-        let imageSize = originalImage.size
-        let scrollViewSize = scrollView.bounds.size
-        
-        let widthRatio = scrollViewSize.width / imageSize.width
-        let heightRatio = scrollViewSize.height / imageSize.height
-        
-        // Use the smaller ratio to ensure the entire image fits
-        let minRatio = min(widthRatio, heightRatio)
-        
-        // Set the image view's frame
-        let scaledWidth = imageSize.width * minRatio
-        let scaledHeight = imageSize.height * minRatio
-        
-        imageView.frame = CGRect(
-            x: (scrollViewSize.width - scaledWidth) / 2,
-            y: (scrollViewSize.height - scaledHeight) / 2,
-            width: scaledWidth,
-            height: scaledHeight
-        )
-        
-        // Set the content size to match the image view
-        scrollView.contentSize = imageView.frame.size
-        
-        // Set min/max zoom scales
-        scrollView.minimumZoomScale = minRatio * 0.5 // Allow zooming out to see more context
-        scrollView.maximumZoomScale = minRatio * 3.0 // Allow zooming in for detail
-        
-        // Start with the image fitting the screen
-        scrollView.zoomScale = minRatio
-        
-        // Center the image in the scroll view
-        updateScrollViewContentInset()
-        
-        print("🔍 Image view frame: \(imageView.frame)")
-        print("🔍 Scroll view content size: \(scrollView.contentSize)")
-        print("🔍 Min zoom scale: \(scrollView.minimumZoomScale), Max zoom scale: \(scrollView.maximumZoomScale)")
-        print("🔍 Initial zoom scale: \(scrollView.zoomScale)")
-    }
-    
-    private func updateScrollViewContentInset() {
-        let imageViewSize = imageView.frame.size
-        let scrollViewSize = scrollView.bounds.size
-        
-        let verticalInset = max(0, (scrollViewSize.height - imageViewSize.height) / 2)
-        let horizontalInset = max(0, (scrollViewSize.width - imageViewSize.width) / 2)
-        
-        scrollView.contentInset = UIEdgeInsets(
-            top: verticalInset,
-            left: horizontalInset,
-            bottom: verticalInset,
-            right: horizontalInset
-        )
-    }
-    
-    private func updateCropOverlayFrame() {
-        // The crop overlay should match the scroll view's frame
-        cropOverlayView.frame = scrollView.frame
-        cropOverlayView.setNeedsDisplay()
-    }
-    
-    @objc private func handleDoubleTap(_ gesture: UITapGestureRecognizer) {
-        if scrollView.zoomScale > scrollView.minimumZoomScale {
-            // If zoomed in, zoom out to minimum
-            scrollView.setZoomScale(scrollView.minimumZoomScale, animated: true)
-        } else {
-            // If zoomed out, zoom in to a higher level
-            let location = gesture.location(in: imageView)
-            let zoomRect = CGRect(
-                x: location.x - 50,
-                y: location.y - 50,
-                width: 100,
-                height: 100
-            )
-            scrollView.zoom(to: zoomRect, animated: true)
+            // Visible corner indicator
+            Circle()
+                .fill(Color.white)
+                .frame(width: cornerSize / 2, height: cornerSize / 2)
+                .overlay(
+                    Circle()
+                        .stroke(Color.black, lineWidth: 1)
+                )
         }
+        .position(position)
+        .highPriorityGesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { value in
+                    if activeCorner != corner {
+                        activeCorner = corner
+                        cornerDragStart = value.startLocation
+                        cornerRectStart = rect
+                    }
+                    updateRect(for: corner, with: value.location, dragStart: cornerDragStart, rectStart: cornerRectStart)
+                }
+                .onEnded { _ in
+                    activeCorner = nil
+                }
+        )
     }
     
-    @objc private func cancelTapped() {
-        print("🔍 Cancel button tapped")
-        delegate?.imageCropperViewControllerDidCancel(self)
-        dismiss(animated: true)
-    }
-    
-    @objc private func doneTapped() {
-        print("🔍 Crop button tapped")
-        // Get the crop rect in normalized coordinates (0-1)
-        let normalizedCropRect = cropOverlayView.normalizedCropRect
-        
-        // Get the original image dimensions
-        let imageWidth = CGFloat(originalImage.cgImage?.width ?? 0)
-        let imageHeight = CGFloat(originalImage.cgImage?.height ?? 0)
-        
-        // Log start of crop operation
-        print("🔍 Starting crop operation")
-        print("🔍 Original image dimensions: \(imageWidth) x \(imageHeight)")
-        print("🔍 Current zoom: \(currentZoomScale), offset: (\(currentContentOffset.x), \(currentContentOffset.y))")
-        
-        // Direct conversion from normalized to pixel coordinates
-        let pixelCropRect = CGRect(
-            x: normalizedCropRect.origin.x * imageWidth,
-            y: normalizedCropRect.origin.y * imageHeight,
-            width: normalizedCropRect.width * imageWidth,
-            height: normalizedCropRect.height * imageHeight
-        )
-        
-        // Ensure integer coordinates to avoid rounding issues
-        let intPixelCropRect = CGRect(
-            x: floor(pixelCropRect.origin.x),
-            y: floor(pixelCropRect.origin.y),
-            width: ceil(pixelCropRect.width),
-            height: ceil(pixelCropRect.height)
-        )
-        
-        // Ensure the crop rect is within the image bounds
-        let imageBounds = CGRect(origin: .zero, size: CGSize(width: imageWidth, height: imageHeight))
-        let validCropRect = intPixelCropRect.intersection(imageBounds)
-        
-        // Log detailed information for debugging
-        print("🔍 Normalized crop rect: \(normalizedCropRect)")
-        print("🔍 Pixel crop rect: \(pixelCropRect)")
-        print("🔍 Valid crop rect: \(validCropRect)")
-        
-        // Create cropped image
-        if let cgImage = originalImage.cgImage?.cropping(to: validCropRect) {
-            let croppedImage = UIImage(cgImage: cgImage)
-            print("🔍 Cropped image dimensions: \(croppedImage.size.width) x \(croppedImage.size.height)")
-            delegate?.imageCropperViewController(self, didFinishCroppingImage: croppedImage)
-            dismiss(animated: true)
-        } else {
-            print("🔍 Cropping failed, returning original image")
-            delegate?.imageCropperViewController(self, didFinishCroppingImage: originalImage)
-            dismiss(animated: true)
+    private func updateRect(for corner: Corner, with location: CGPoint, dragStart: CGPoint, rectStart: CGRect) {
+        var newRect = rectStart
+        // Calculate translation from drag start
+        let dx = location.x - dragStart.x
+        let dy = location.y - dragStart.y
+        switch corner {
+        case .topLeft:
+            let newX = max(imageFrame.minX, min(rectStart.maxX - 50, rectStart.origin.x + dx))
+            let newY = max(imageFrame.minY, min(rectStart.maxY - 50, rectStart.origin.y + dy))
+            newRect.origin.x = newX
+            newRect.origin.y = newY
+            newRect.size.width = rectStart.maxX - newX
+            newRect.size.height = rectStart.maxY - newY
+        case .topRight:
+            let newWidth = max(50, min(imageFrame.maxX - rectStart.minX, rectStart.width + dx))
+            let newY = max(imageFrame.minY, min(rectStart.maxY - 50, rectStart.origin.y + dy))
+            newRect.size.width = newWidth
+            newRect.origin.y = newY
+            newRect.size.height = rectStart.maxY - newY
+        case .bottomLeft:
+            let newX = max(imageFrame.minX, min(rectStart.maxX - 50, rectStart.origin.x + dx))
+            let newHeight = max(50, min(imageFrame.maxY - rectStart.minY, rectStart.height + dy))
+            newRect.origin.x = newX
+            newRect.size.width = rectStart.maxX - newX
+            newRect.size.height = newHeight
+        case .bottomRight:
+            let newWidth = max(50, min(imageFrame.maxX - rectStart.minX, rectStart.width + dx))
+            let newHeight = max(50, min(imageFrame.maxY - rectStart.minY, rectStart.height + dy))
+            newRect.size.width = newWidth
+            newRect.size.height = newHeight
         }
-    }
-}
-
-// MARK: - UIScrollViewDelegate
-extension UIImageCropperViewController: UIScrollViewDelegate {
-    func viewForZooming(in scrollView: UIScrollView) -> UIView? {
-        return imageView
-    }
-    
-    func scrollViewDidZoom(_ scrollView: UIScrollView) {
-        updateScrollViewContentInset()
-        currentZoomScale = scrollView.zoomScale
-        print("🔍 Zoom scale changed to: \(currentZoomScale)")
-    }
-    
-    func scrollViewDidScroll(_ scrollView: UIScrollView) {
-        currentContentOffset = scrollView.contentOffset
-    }
-}
-
-// MARK: - CropOverlayView
-class CropOverlayView: UIView {
-    private let cropRectInset: CGFloat = 20
-    private var cropRect: CGRect = .zero
-    
-    // Normalized crop rect (0-1 coordinates)
-    var normalizedCropRect: CGRect {
-        guard bounds.width > 0 && bounds.height > 0 else { return CGRect(x: 0, y: 0, width: 1, height: 1) }
-        
-        return CGRect(
-            x: (cropRect.origin.x - cropRectInset) / bounds.width,
-            y: (cropRect.origin.y - cropRectInset) / bounds.height,
-            width: cropRect.width / bounds.width,
-            height: cropRect.height / bounds.height
-        )
-    }
-    
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        backgroundColor = .clear
-        isUserInteractionEnabled = false
-    }
-    
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-    
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        updateCropRect()
-    }
-    
-    private func updateCropRect() {
-        let minDimension = min(bounds.width, bounds.height) - (cropRectInset * 2)
-        let size = CGSize(width: minDimension, height: minDimension)
-        
-        cropRect = CGRect(
-            x: (bounds.width - size.width) / 2 + cropRectInset,
-            y: (bounds.height - size.height) / 2 + cropRectInset,
-            width: size.width - (cropRectInset * 2),
-            height: size.height - (cropRectInset * 2)
-        )
-        
-        setNeedsDisplay()
-    }
-    
-    override func draw(_ rect: CGRect) {
-        guard let context = UIGraphicsGetCurrentContext() else { return }
-        
-        // Draw semi-transparent overlay
-        context.setFillColor(UIColor.black.withAlphaComponent(0.5).cgColor)
-        context.fill(rect)
-        
-        // Clear the crop rect area
-        context.setBlendMode(.clear)
-        context.fill(cropRect)
-        
-        // Reset blend mode
-        context.setBlendMode(.normal)
-        
-        // Draw crop rect border
-        context.setStrokeColor(UIColor.white.cgColor)
-        context.setLineWidth(1.0)
-        context.stroke(cropRect)
-        
-        // Draw grid lines
-        context.setStrokeColor(UIColor.white.withAlphaComponent(0.5).cgColor)
-        context.setLineWidth(0.5)
-        
-        // Vertical lines
-        let thirdWidth = cropRect.width / 3
-        context.move(to: CGPoint(x: cropRect.minX + thirdWidth, y: cropRect.minY))
-        context.addLine(to: CGPoint(x: cropRect.minX + thirdWidth, y: cropRect.maxY))
-        
-        context.move(to: CGPoint(x: cropRect.minX + 2 * thirdWidth, y: cropRect.minY))
-        context.addLine(to: CGPoint(x: cropRect.minX + 2 * thirdWidth, y: cropRect.maxY))
-        
-        // Horizontal lines
-        let thirdHeight = cropRect.height / 3
-        context.move(to: CGPoint(x: cropRect.minX, y: cropRect.minY + thirdHeight))
-        context.addLine(to: CGPoint(x: cropRect.maxX, y: cropRect.minY + thirdHeight))
-        
-        context.move(to: CGPoint(x: cropRect.minX, y: cropRect.minY + 2 * thirdHeight))
-        context.addLine(to: CGPoint(x: cropRect.maxX, y: cropRect.minY + 2 * thirdHeight))
-        
-        context.strokePath()
+        // Constrain to image bounds
+        if newRect.minX < imageFrame.minX { newRect.origin.x = imageFrame.minX }
+        if newRect.maxX > imageFrame.maxX { newRect.size.width = imageFrame.maxX - newRect.minX }
+        if newRect.minY < imageFrame.minY { newRect.origin.y = imageFrame.minY }
+        if newRect.maxY > imageFrame.maxY { newRect.size.height = imageFrame.maxY - newRect.minY }
+        rect = newRect
     }
 }

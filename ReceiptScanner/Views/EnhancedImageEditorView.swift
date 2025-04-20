@@ -22,6 +22,8 @@ struct EnhancedImageEditorView: View {
     @State private var zoomScale: CGFloat = 1.0
     @State private var rotationAngle: Int = 0 // 0, 90, 180, 270 degrees
     @State private var isEditingSlider: Bool = false
+    @State private var originalImage: UIImage? // Store the original image
+    @State private var previousCropRect: CGRect? = nil // In image coordinates
     
     @Environment(\.presentationMode) var presentationMode
     @Environment(\.colorScheme) private var colorScheme
@@ -57,7 +59,7 @@ struct EnhancedImageEditorView: View {
         // when the user is dragging a slider
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             DispatchQueue.global(qos: .userInitiated).async {
-                guard let ciImage = CIImage(image: processedImage ?? image) else {
+                guard let ciImage = CIImage(image: originalImage ?? image) else {
                     DispatchQueue.main.async {
                         isProcessing = false
                     }
@@ -126,6 +128,7 @@ struct EnhancedImageEditorView: View {
     
     private func resetImage() {
         processedImage = image
+        originalImage = image
         brightness = 0.0
         contrast = 1.0
         sharpness = 0.0
@@ -388,20 +391,6 @@ struct EnhancedImageEditorView: View {
                     
                     // Action buttons - styled like the tab bar in ScannerView
                     HStack(spacing: 0) {
-                        // Crop button
-                        Button(action: {
-                            showingCropView = true
-                        }) {
-                            VStack(spacing: 4) {
-                                Image(systemName: "crop")
-                                    .font(.system(size: 24))
-                                Text("Crop")
-                                    .font(.caption)
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                        }
-                        .foregroundColor(.blue)
                         
                         // Rotate button
                         Button(action: {
@@ -411,6 +400,22 @@ struct EnhancedImageEditorView: View {
                                 Image(systemName: "rotate.right")
                                     .font(.system(size: 24))
                                 Text("Rotate")
+                                    .font(.caption)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                        }
+                        .foregroundColor(.blue)
+                        
+                        // Crop button
+                        Button(action: {
+                            print("🔍 Crop button tapped")
+                            showingCropView = true
+                        }) {
+                            VStack(spacing: 4) {
+                                Image(systemName: "crop")
+                                    .font(.system(size: 24))
+                                Text("Crop")
                                     .font(.caption)
                             }
                             .frame(maxWidth: .infinity)
@@ -491,16 +496,24 @@ struct EnhancedImageEditorView: View {
             )
             .onAppear {
                 print("🔍 EnhancedImageEditorView appeared")
+                // Store the original image when the view appears
+                originalImage = image
                 processedImage = image
                 cacheAndDisplayImage()
             }
-            .sheet(isPresented: $showingCropView) {
-                let img = processedImage ?? image
-                ImageCropView(image: img) { croppedImg in
-                    if let croppedImg = croppedImg {
+            .fullScreenCover(isPresented: $showingCropView) {
+                ImageCropView(
+                    image: image, // Always pass the original image
+                    initialCropRect: previousCropRect // Pass previous crop rect in image coordinates
+                ) { croppedImg, usedCropRect in
+                    if let croppedImg = croppedImg, let usedCropRect = usedCropRect {
                         print("🔍 Received cropped image with dimensions: \(croppedImg.size.width) x \(croppedImg.size.height)")
+                        // Update both the original and processed images with the cropped one
+                        self.originalImage = croppedImg
                         self.processedImage = croppedImg
-                        cacheAndDisplayImage()
+                        // Save the crop rect in image coordinates for future cropping
+                        self.previousCropRect = usedCropRect
+                        // Apply any current edits to the cropped image
                         updateImage()
                     } else {
                         print("🔍 Crop operation cancelled or failed")
