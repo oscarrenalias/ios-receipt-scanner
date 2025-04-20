@@ -12,6 +12,9 @@ class CameraService: NSObject {
     private var photoOutput: AVCapturePhotoOutput?
     private var previewLayer: AVCaptureVideoPreviewLayer?
     private var photoCaptureCompletionBlock: ((UIImage?, Error?) -> Void)?
+    private var currentZoomFactor: CGFloat = 1.0
+    private var minZoomFactor: CGFloat = 1.0
+    private var maxZoomFactor: CGFloat = 5.0
     
     // MARK: - Setup
     
@@ -125,6 +128,34 @@ class CameraService: NSObject {
             connection.videoOrientation = .portrait
         }
     }
+    
+    // MARK: - Zoom Handling
+    
+    func setZoom(factor: CGFloat) {
+        guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else { return }
+        do {
+            try device.lockForConfiguration()
+            let zoom = max(minZoomFactor, min(factor, device.activeFormat.videoMaxZoomFactor, maxZoomFactor))
+            device.videoZoomFactor = zoom
+            currentZoomFactor = zoom
+            device.unlockForConfiguration()
+        } catch {
+            print("Failed to set zoom: \(error)")
+        }
+    }
+    
+    func getCurrentZoomFactor() -> CGFloat {
+        return currentZoomFactor
+    }
+    
+    func getMaxZoomFactor() -> CGFloat {
+        guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else { return 5.0 }
+        return min(device.activeFormat.videoMaxZoomFactor, maxZoomFactor)
+    }
+    
+    func getMinZoomFactor() -> CGFloat {
+        return minZoomFactor
+    }
 }
 
 // MARK: - AVCapturePhotoCaptureDelegate
@@ -175,6 +206,9 @@ class CameraViewController: UIViewController {
     private let cameraPreviewView = UIView()
     private let captureButton = UIButton(type: .system)
     private let closeButton = UIButton(type: .system)
+    private let zoomLabel = UILabel()
+    private var pinchGesture: UIPinchGestureRecognizer!
+    private var doubleTapGesture: UITapGestureRecognizer!
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -190,12 +224,27 @@ class CameraViewController: UIViewController {
                 }
             }
         }
+        
+        // Add pinch gesture for zoom
+        pinchGesture = UIPinchGestureRecognizer(target: self, action: #selector(handlePinch(_:)))
+        cameraPreviewView.addGestureRecognizer(pinchGesture)
+        
+        // Add double-tap gesture for focus
+        doubleTapGesture = UITapGestureRecognizer(target: self, action: #selector(handleDoubleTap(_:)))
+        doubleTapGesture.numberOfTapsRequired = 2
+        cameraPreviewView.addGestureRecognizer(doubleTapGesture)
+        
+        // Setup zoom label
+        setupZoomLabel()
+        updateZoomLabel()
     }
     
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         // Ensure preview layer resizes with view
         CameraService.shared.updatePreviewLayerFrame(to: cameraPreviewView.bounds)
+        self.view.bringSubviewToFront(zoomLabel)
+        updateZoomLabel()
     }
     
     override func viewWillDisappear(_ animated: Bool) {
@@ -241,11 +290,84 @@ class CameraViewController: UIViewController {
         closeButton.addTarget(self, action: #selector(dismissCamera), for: .touchUpInside)
         view.addSubview(closeButton)
         NSLayoutConstraint.activate([
-            closeButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 20),
+            closeButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 16),
             closeButton.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 20),
             closeButton.widthAnchor.constraint(equalToConstant: 30),
             closeButton.heightAnchor.constraint(equalToConstant: 30)
         ])
+    }
+    
+    private func setupZoomLabel() {
+        zoomLabel.translatesAutoresizingMaskIntoConstraints = false
+        zoomLabel.textColor = .white
+        zoomLabel.font = UIFont.boldSystemFont(ofSize: 18)
+        zoomLabel.backgroundColor = UIColor.black.withAlphaComponent(0.4)
+        zoomLabel.layer.cornerRadius = 8
+        zoomLabel.clipsToBounds = true
+        zoomLabel.textAlignment = .center
+        self.view.addSubview(zoomLabel)
+        NSLayoutConstraint.activate([
+            zoomLabel.topAnchor.constraint(equalTo: self.view.safeAreaLayoutGuide.topAnchor, constant: 16),
+            zoomLabel.trailingAnchor.constraint(equalTo: self.view.safeAreaLayoutGuide.trailingAnchor, constant: -20),
+            zoomLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 44),
+            zoomLabel.heightAnchor.constraint(equalToConstant: 32)
+        ])
+        self.view.bringSubviewToFront(zoomLabel)
+    }
+    
+    private func updateZoomLabel() {
+        let zoom = CameraService.shared.getCurrentZoomFactor()
+        zoomLabel.text = String(format: "%.1fx", zoom)
+    }
+    
+    @objc private func handlePinch(_ gesture: UIPinchGestureRecognizer) {
+        guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else { return }
+        if gesture.state == .began || gesture.state == .changed {
+            let maxZoom = CameraService.shared.getMaxZoomFactor()
+            let minZoom = CameraService.shared.getMinZoomFactor()
+            var newZoom = device.videoZoomFactor * gesture.scale
+            newZoom = max(minZoom, min(newZoom, maxZoom))
+            CameraService.shared.setZoom(factor: newZoom)
+            updateZoomLabel()
+            gesture.scale = 1.0
+        }
+    }
+    
+    @objc private func handleDoubleTap(_ gesture: UITapGestureRecognizer) {
+        let location = gesture.location(in: cameraPreviewView)
+        guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else { return }
+        let focusPoint = CGPoint(x: location.x / cameraPreviewView.bounds.width, y: location.y / cameraPreviewView.bounds.height)
+        do {
+            try device.lockForConfiguration()
+            if device.isFocusPointOfInterestSupported {
+                device.focusPointOfInterest = focusPoint
+                device.focusMode = .autoFocus
+            }
+            if device.isExposurePointOfInterestSupported {
+                device.exposurePointOfInterest = focusPoint
+                device.exposureMode = .autoExpose
+            }
+            device.unlockForConfiguration()
+        } catch {
+            print("Failed to set focus/exposure: \(error)")
+        }
+        // Optional: add a quick visual feedback for focus
+        showFocusIndicator(at: location)
+    }
+    
+    private func showFocusIndicator(at point: CGPoint) {
+        let indicator = UIView(frame: CGRect(x: 0, y: 0, width: 60, height: 60))
+        indicator.center = point
+        indicator.layer.borderColor = UIColor.yellow.cgColor
+        indicator.layer.borderWidth = 2
+        indicator.layer.cornerRadius = 30
+        indicator.backgroundColor = UIColor.clear
+        cameraPreviewView.addSubview(indicator)
+        UIView.animate(withDuration: 0.7, animations: {
+            indicator.alpha = 0
+        }) { _ in
+            indicator.removeFromSuperview()
+        }
     }
     
     @objc private func capturePhoto() {
