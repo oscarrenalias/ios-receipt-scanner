@@ -255,6 +255,32 @@ struct EnhancedImageEditorView: View {
         }
     }
     
+    // Helper to normalize image to sRGB/SDR and .up orientation
+    private func normalizedImage(_ image: UIImage) -> UIImage {
+        guard let cgImage = image.cgImage else { return image }
+        let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
+        let width = cgImage.width
+        let height = cgImage.height
+        let bitsPerComponent = 8
+        let bytesPerRow = 0
+        let bitmapInfo = CGImageAlphaInfo.premultipliedLast.rawValue
+        guard let context = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: bitsPerComponent,
+            bytesPerRow: bytesPerRow,
+            space: colorSpace,
+            bitmapInfo: bitmapInfo
+        ) else {
+            return image
+        }
+        let rect = CGRect(x: 0, y: 0, width: width, height: height)
+        context.draw(cgImage, in: rect)
+        guard let newCGImage = context.makeImage() else { return image }
+        return UIImage(cgImage: newCGImage, scale: image.scale, orientation: .up)
+    }
+    
     var body: some View {
         NavigationView {
             ZStack(alignment: .bottom) {
@@ -379,7 +405,7 @@ struct EnhancedImageEditorView: View {
                             .padding(.horizontal)
                             .onChange(of: isBlackAndWhite) { _, _ in
                                 // Only update if not already processing
-                                if !isProcessing {
+                                if (!isProcessing) {
                                     updateImage()
                                 }
                             }
@@ -513,8 +539,10 @@ struct EnhancedImageEditorView: View {
             .onAppear {
                 print("🔍 EnhancedImageEditorView appeared")
                 // Store the original image when the view appears
-                originalImage = image
-                processedImage = image
+                // Normalize the image to avoid SDR/HDR display issues
+                let normalized = normalizedImage(image)
+                originalImage = normalized
+                processedImage = normalized
                 cacheAndDisplayImage()
             }
             .fullScreenCover(isPresented: $showingCropView) {
