@@ -2,18 +2,24 @@ import SwiftUI
 import UIKit
 import Vision
 
+struct Quadrilateral {
+    var topLeft: CGPoint
+    var topRight: CGPoint
+    var bottomRight: CGPoint
+    var bottomLeft: CGPoint
+}
+
 struct ImageCropView: View {
     let image: UIImage
     let initialCropRect: CGRect?
     let completion: (UIImage?, CGRect?) -> Void
     
-    @State private var cropRect: CGRect = .zero
+    @State private var quad: Quadrilateral = Quadrilateral(
+        topLeft: .zero, topRight: .zero, bottomRight: .zero, bottomLeft: .zero
+    )
     @State private var viewSize: CGSize = .zero
     @State private var imageSize: CGSize = .zero
     @State private var imageFrame: CGRect = .zero
-    @State private var isDragging: Bool = false
-    @State private var dragStart: CGPoint = .zero
-    @State private var rectStart: CGRect = .zero
     @State private var isProcessing: Bool = true // Show overlay by default
     @Environment(\.presentationMode) var presentationMode
     
@@ -39,7 +45,7 @@ struct ImageCropView: View {
                                         imageFrame = frame
                                         viewSize = geometry.size
                                         imageSize = CGSize(width: frame.width, height: frame.height)
-                                        if cropRect == .zero && frame.width > 0 && frame.height > 0 {
+                                        if quad.topLeft == .zero && frame.width > 0 && frame.height > 0 {
                                             if let initialCropRect = initialCropRect {
                                                 let scaleX = frame.width / image.size.width
                                                 let scaleY = frame.height / image.size.height
@@ -47,28 +53,35 @@ struct ImageCropView: View {
                                                 let cropY = frame.minY + initialCropRect.minY * scaleY
                                                 let cropWidth = initialCropRect.width * scaleX
                                                 let cropHeight = initialCropRect.height * scaleY
-                                                cropRect = CGRect(x: cropX, y: cropY, width: cropWidth, height: cropHeight)
+                                                quad = Quadrilateral(
+                                                    topLeft: CGPoint(x: cropX, y: cropY),
+                                                    topRight: CGPoint(x: cropX + cropWidth, y: cropY),
+                                                    bottomRight: CGPoint(x: cropX + cropWidth, y: cropY + cropHeight),
+                                                    bottomLeft: CGPoint(x: cropX, y: cropY + cropHeight)
+                                                )
                                             } else {
                                                 let cropWidth = frame.width * 0.8
                                                 let cropHeight = frame.height * 0.8
                                                 let cropX = frame.minX + (frame.width - cropWidth) / 2
                                                 let cropY = frame.minY + (frame.height - cropHeight) / 2
-                                                cropRect = CGRect(x: cropX, y: cropY, width: cropWidth, height: cropHeight)
+                                                quad = Quadrilateral(
+                                                    topLeft: CGPoint(x: cropX, y: cropY),
+                                                    topRight: CGPoint(x: cropX + cropWidth, y: cropY),
+                                                    bottomRight: CGPoint(x: cropX + cropWidth, y: cropY + cropHeight),
+                                                    bottomLeft: CGPoint(x: cropX, y: cropY + cropHeight)
+                                                )
                                             }
-                                            print("🔍 cropRect initialized: \(cropRect)")
+                                            print("🔍 quad initialized: \(quad)")
                                         }
                                     }
                             }
                         )
                     // Overlay absolutely positioned over the imageFrame
-                    if imageFrame.width > 0 && imageFrame.height > 0 && cropRect.width > 0 && cropRect.height > 0 {
-                        CropOverlayView(
-                            rect: $cropRect,
+                    if imageFrame.width > 0 && imageFrame.height > 0 && quad.topLeft != .zero && quad.topRight != .zero && quad.bottomRight != .zero && quad.bottomLeft != .zero {
+                        QuadCropOverlayView(
+                            quad: $quad,
                             imageFrame: imageFrame,
-                            cornerSize: cornerSize,
-                            isDragging: $isDragging,
-                            dragStart: $dragStart,
-                            rectStart: $rectStart
+                            cornerSize: cornerSize
                         )
                         .frame(width: imageFrame.width, height: imageFrame.height)
                         .offset(x: imageFrame.minX, y: imageFrame.minY)
@@ -103,9 +116,24 @@ struct ImageCropView: View {
                     // Bottom toolbar
                     HStack {
                         Spacer()
-                        
+                        // Reset to Rectangle button
                         Button(action: {
-                            // Perform cropping
+                            resetQuadToRectangle()
+                        }) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "arrow.uturn.backward")
+                                Text("Reset")
+                            }
+                            .fontWeight(.bold)
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 12)
+                            .background(Color.gray.opacity(0.7))
+                            .cornerRadius(8)
+                        }
+                        .padding(.trailing, 8)
+                        // Crop button
+                        Button(action: {
                             performCrop()
                         }) {
                             Text("Crop")
@@ -159,39 +187,36 @@ struct ImageCropView: View {
     }
     
     private func performCrop() {
-        print("🔍 Performing crop with rect: \(cropRect)")
-        
-        // Normalize image orientation to .up before cropping
+        guard quad.topLeft != .zero else { return }
         let normalizedImage = image.normalizedToUpOrientation()
-        
-        // Convert crop rect from display coordinates to image coordinates
         let imageDisplayFrame = imageFrame
         let scaleX = normalizedImage.size.width / imageDisplayFrame.width
         let scaleY = normalizedImage.size.height / imageDisplayFrame.height
-        let cropX = (cropRect.minX - imageDisplayFrame.minX) * scaleX
-        let cropY = (cropRect.minY - imageDisplayFrame.minY) * scaleY
-        let cropWidth = cropRect.width * scaleX
-        let cropHeight = cropRect.height * scaleY
-        let imageCropRect = CGRect(x: cropX, y: cropY, width: cropWidth, height: cropHeight)
-        print("🔍 Image crop rect: \(imageCropRect)")
-        print("🔍 Normalized image size: \(normalizedImage.size.width) x \(normalizedImage.size.height)")
-        let validCropRect = CGRect(
-            x: max(0, min(imageCropRect.minX, normalizedImage.size.width - 1)),
-            y: max(0, min(imageCropRect.minY, normalizedImage.size.height - 1)),
-            width: min(imageCropRect.width, normalizedImage.size.width - imageCropRect.minX),
-            height: min(imageCropRect.height, normalizedImage.size.height - imageCropRect.minY)
-        )
-        print("🔍 Valid crop rect: \(validCropRect)")
-        if let cgImage = normalizedImage.cgImage?.cropping(to: validCropRect) {
-            let croppedImage = UIImage(cgImage: cgImage, scale: normalizedImage.scale, orientation: .up)
-            print("🔍 Cropping successful, new image size: \(croppedImage.size.width) x \(croppedImage.size.height)")
-            presentationMode.wrappedValue.dismiss()
-            completion(croppedImage, validCropRect)
-        } else {
-            print("❌ Cropping failed")
-            presentationMode.wrappedValue.dismiss()
-            completion(nil, nil)
+        let points = [quad.topLeft, quad.topRight, quad.bottomRight, quad.bottomLeft].map {
+            let x = ($0.x - imageDisplayFrame.minX) * scaleX
+            let y = ($0.y - imageDisplayFrame.minY) * scaleY
+            // Flip y for Core Image (origin is bottom-left)
+            return CGPoint(x: x, y: normalizedImage.size.height - y)
         }
+        if let ciImage = CIImage(image: normalizedImage) {
+            let filter = CIFilter.perspectiveCorrection()
+            filter.inputImage = ciImage
+            filter.topLeft = points[0]
+            filter.topRight = points[1]
+            filter.bottomRight = points[2]
+            filter.bottomLeft = points[3]
+            let context = CIContext()
+            if let output = filter.outputImage {
+                if let cgImage = context.createCGImage(output, from: output.extent) {
+                    let croppedImage = UIImage(cgImage: cgImage, scale: normalizedImage.scale, orientation: .up)
+                    presentationMode.wrappedValue.dismiss()
+                    completion(croppedImage, output.extent)
+                    return
+                }
+            }
+        }
+        presentationMode.wrappedValue.dismiss()
+        completion(nil, nil)
     }
     
     private func detectDocumentEdges() {
@@ -209,12 +234,12 @@ struct ImageCropView: View {
                     defer { isProcessing = false }
                     if let error = error {
                         print("❌ Vision: VNDetectRectanglesRequest failed: \(error.localizedDescription)")
-                        setDefaultCropRect()
+                        setDefaultQuad()
                         return
                     }
                     guard let results = request.results as? [VNRectangleObservation], let rect = results.first else {
                         print("ℹ️ Vision: No rectangles detected, falling back to default crop rect.")
-                        setDefaultCropRect()
+                        setDefaultQuad()
                         return
                     }
                     print("✅ Vision: Detected rectangle: ")
@@ -223,7 +248,7 @@ struct ImageCropView: View {
                     print("  bottomLeft:  \(rect.bottomLeft)")
                     print("  bottomRight: \(rect.bottomRight)")
                     print("  boundingBox: \(rect.boundingBox)")
-                    setCropRect(from: rect)
+                    setQuad(from: rect)
                 }
             }
             // Configure request for documents (more permissive)
@@ -238,25 +263,29 @@ struct ImageCropView: View {
                 try handler.perform([request])
             } catch {
                 DispatchQueue.main.async {
-                    setDefaultCropRect()
+                    setDefaultQuad()
                     isProcessing = false
                 }
             }
         }
     }
 
-    private func setDefaultCropRect() {
-        // Use the same logic as before for default 80% rectangle
-        if let frame = getImageFrame(), cropRect == .zero {
+    private func setDefaultQuad() {
+        if let frame = getImageFrame(), quad.topLeft == .zero {
             let cropWidth = frame.width * 0.8
             let cropHeight = frame.height * 0.8
             let cropX = frame.minX + (frame.width - cropWidth) / 2
             let cropY = frame.minY + (frame.height - cropHeight) / 2
-            cropRect = CGRect(x: cropX, y: cropY, width: cropWidth, height: cropHeight)
+            quad = Quadrilateral(
+                topLeft: CGPoint(x: cropX, y: cropY),
+                topRight: CGPoint(x: cropX + cropWidth, y: cropY),
+                bottomRight: CGPoint(x: cropX + cropWidth, y: cropY + cropHeight),
+                bottomLeft: CGPoint(x: cropX, y: cropY + cropHeight)
+            )
         }
     }
 
-    private func setCropRect(from observation: VNRectangleObservation) {
+    private func setQuad(from observation: VNRectangleObservation) {
         guard let frame = getImageFrame() else { return }
         // VNRectangleObservation provides normalized coordinates (0,0) is bottom-left
         // Convert to image coordinates, then to displayed frame
@@ -270,20 +299,15 @@ struct ImageCropView: View {
         let tr = convert(observation.topRight)
         let bl = convert(observation.bottomLeft)
         let br = convert(observation.bottomRight)
-        // Bounding box in image coordinates
-        let minX = min(tl.x, tr.x, bl.x, br.x)
-        let maxX = max(tl.x, tr.x, bl.x, br.x)
-        let minY = min(tl.y, tr.y, bl.y, br.y)
-        let maxY = max(tl.y, tr.y, bl.y, br.y)
-        let rectInImage = CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
         // Map to displayed frame
         let scaleX = frame.width / imageWidth
         let scaleY = frame.height / imageHeight
-        let cropX = frame.minX + rectInImage.minX * scaleX
-        let cropY = frame.minY + rectInImage.minY * scaleY
-        let cropWidth = rectInImage.width * scaleX
-        let cropHeight = rectInImage.height * scaleY
-        cropRect = CGRect(x: cropX, y: cropY, width: cropWidth, height: cropHeight)
+        quad = Quadrilateral(
+            topLeft: CGPoint(x: frame.minX + tl.x * scaleX, y: frame.minY + tl.y * scaleY),
+            topRight: CGPoint(x: frame.minX + tr.x * scaleX, y: frame.minY + tr.y * scaleY),
+            bottomRight: CGPoint(x: frame.minX + br.x * scaleX, y: frame.minY + br.y * scaleY),
+            bottomLeft: CGPoint(x: frame.minX + bl.x * scaleX, y: frame.minY + bl.y * scaleY)
+        )
     }
 
     private func getImageFrame() -> CGRect? {
@@ -292,6 +316,21 @@ struct ImageCropView: View {
             return imageFrame
         }
         return nil
+    }
+
+    private func resetQuadToRectangle() {
+        if let frame = getImageFrame() {
+            let cropWidth = frame.width * 0.8
+            let cropHeight = frame.height * 0.8
+            let cropX = frame.minX + (frame.width - cropWidth) / 2
+            let cropY = frame.minY + (frame.height - cropHeight) / 2
+            quad = Quadrilateral(
+                topLeft: CGPoint(x: cropX, y: cropY),
+                topRight: CGPoint(x: cropX + cropWidth, y: cropY),
+                bottomRight: CGPoint(x: cropX + cropWidth, y: cropY + cropHeight),
+                bottomLeft: CGPoint(x: cropX, y: cropY + cropHeight)
+            )
+        }
     }
 }
 
@@ -303,178 +342,72 @@ struct ImageFramePreferenceKey: PreferenceKey {
     }
 }
 
-struct CropOverlayView: View {
-    @Binding var rect: CGRect
+struct QuadCropOverlayView: View {
+    @Binding var quad: Quadrilateral
     let imageFrame: CGRect
     let cornerSize: CGFloat
-    @Binding var isDragging: Bool
-    @Binding var dragStart: CGPoint
-    @Binding var rectStart: CGRect
-    @State private var activeCorner: Corner? = nil
-    @State private var cornerDragStart: CGPoint = .zero
-    @State private var cornerRectStart: CGRect = .zero
-    
-    enum Corner: Hashable {
-        case topLeft, topRight, bottomLeft, bottomRight
-    }
+    @State private var activeCorner: Int? = nil
     
     var body: some View {
         ZStack {
-            // Semi-transparent overlay outside crop area
-            Rectangle()
-                .fill(Color.black.opacity(0.5))
-                .mask(
-                    Rectangle()
-                        .frame(width: imageFrame.width, height: imageFrame.height)
-                        .position(x: imageFrame.midX, y: imageFrame.midY)
-                        .overlay(
-                            Rectangle()
-                                .frame(width: rect.width, height: rect.height)
-                                .position(x: rect.midX, y: rect.midY)
-                                .blendMode(.destinationOut)
-                        )
-                )
+            // Mask outside quad
+            Path { path in
+                path.addRect(CGRect(origin: .zero, size: CGSize(width: imageFrame.width, height: imageFrame.height)))
+                path.move(to: quad.topLeft)
+                path.addLine(to: quad.topRight)
+                path.addLine(to: quad.bottomRight)
+                path.addLine(to: quad.bottomLeft)
+                path.closeSubpath()
+            }
+            .fill(Color.black.opacity(0.5), style: FillStyle(eoFill: true))
             
-            // Crop rectangle border
-            Rectangle()
-                .stroke(Color.white, lineWidth: 1)
-                .frame(width: rect.width, height: rect.height)
-                .position(x: rect.midX, y: rect.midY)
-                // Make the entire rectangle draggable, but only if no corner is being dragged
-                .gesture(
-                    DragGesture(minimumDistance: 0)
-                        .onChanged { value in
-                            // Only allow rectangle dragging if no corner is active
-                            if activeCorner == nil {
-                                if !isDragging {
-                                    isDragging = true
-                                    dragStart = value.location
-                                    rectStart = rect
-                                    print("🔍 Started dragging rectangle at \(dragStart)")
-                                }
-                                
-                                let translation = CGPoint(
-                                    x: value.location.x - dragStart.x,
-                                    y: value.location.y - dragStart.y
-                                )
-                                
-                                // Calculate new rect position
-                                var newRect = rectStart
-                                newRect.origin.x += translation.x
-                                newRect.origin.y += translation.y
-                                
-                                // Constrain to image bounds
-                                if newRect.minX < imageFrame.minX {
-                                    newRect.origin.x = imageFrame.minX
-                                }
-                                if newRect.maxX > imageFrame.maxX {
-                                    newRect.origin.x = imageFrame.maxX - newRect.width
-                                }
-                                if newRect.minY < imageFrame.minY {
-                                    newRect.origin.y = imageFrame.minY
-                                }
-                                if newRect.maxY > imageFrame.maxY {
-                                    newRect.origin.y = imageFrame.maxY - newRect.height
-                                }
-                                
-                                rect = newRect
+            // Draw quad border
+            Path { path in
+                path.move(to: quad.topLeft)
+                path.addLine(to: quad.topRight)
+                path.addLine(to: quad.bottomRight)
+                path.addLine(to: quad.bottomLeft)
+                path.closeSubpath()
+            }
+            .stroke(Color.white, lineWidth: 2)
+            
+            // Corner controls
+            ForEach(0..<4, id: \.self) { i in
+                let point = [quad.topLeft, quad.topRight, quad.bottomRight, quad.bottomLeft][i]
+                Circle()
+                    .fill(Color.white)
+                    .frame(width: cornerSize / 2, height: cornerSize / 2)
+                    .overlay(Circle().stroke(Color.blue, lineWidth: 2))
+                    .position(point)
+                    .gesture(
+                        DragGesture(minimumDistance: 0)
+                            .onChanged { value in
+                                activeCorner = i
+                                updateCorner(index: i, to: value.location)
                             }
-                        }
-                        .onEnded { _ in
-                            isDragging = false
-                            print("🔍 Finished dragging rectangle")
-                        }
-                )
-            
-            // Corner controls - make them larger and more visible
-            Group {
-                // Top-left corner
-                cornerControl(at: CGPoint(x: rect.minX, y: rect.minY), corner: .topLeft)
-                
-                // Top-right corner
-                cornerControl(at: CGPoint(x: rect.maxX, y: rect.minY), corner: .topRight)
-                
-                // Bottom-left corner
-                cornerControl(at: CGPoint(x: rect.minX, y: rect.maxY), corner: .bottomLeft)
-                
-                // Bottom-right corner
-                cornerControl(at: CGPoint(x: rect.maxX, y: rect.maxY), corner: .bottomRight)
+                            .onEnded { _ in
+                                activeCorner = nil
+                            }
+                    )
             }
         }
     }
     
-    @ViewBuilder
-    private func cornerControl(at position: CGPoint, corner: Corner) -> some View {
-        // Make corners more visible with a larger touch area
-        ZStack {
-            // Larger transparent touch area
-            Circle()
-                .fill(Color.white.opacity(0.001)) // Nearly invisible but still detectable for touch
-                .frame(width: cornerSize * 2, height: cornerSize * 2)
-            
-            // Visible corner indicator
-            Circle()
-                .fill(Color.white)
-                .frame(width: cornerSize / 2, height: cornerSize / 2)
-                .overlay(
-                    Circle()
-                        .stroke(Color.black, lineWidth: 1)
-                )
+    private func updateCorner(index: Int, to location: CGPoint) {
+        switch index {
+        case 0: quad.topLeft = clamp(location)
+        case 1: quad.topRight = clamp(location)
+        case 2: quad.bottomRight = clamp(location)
+        case 3: quad.bottomLeft = clamp(location)
+        default: break
         }
-        .position(position)
-        .highPriorityGesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { value in
-                    if activeCorner != corner {
-                        activeCorner = corner
-                        cornerDragStart = value.startLocation
-                        cornerRectStart = rect
-                    }
-                    updateRect(for: corner, with: value.location, dragStart: cornerDragStart, rectStart: cornerRectStart)
-                }
-                .onEnded { _ in
-                    activeCorner = nil
-                }
-        )
     }
     
-    private func updateRect(for corner: Corner, with location: CGPoint, dragStart: CGPoint, rectStart: CGRect) {
-        var newRect = rectStart
-        // Calculate translation from drag start
-        let dx = location.x - dragStart.x
-        let dy = location.y - dragStart.y
-        switch corner {
-        case .topLeft:
-            let newX = max(imageFrame.minX, min(rectStart.maxX - 50, rectStart.origin.x + dx))
-            let newY = max(imageFrame.minY, min(rectStart.maxY - 50, rectStart.origin.y + dy))
-            newRect.origin.x = newX
-            newRect.origin.y = newY
-            newRect.size.width = rectStart.maxX - newX
-            newRect.size.height = rectStart.maxY - newY
-        case .topRight:
-            let newWidth = max(50, min(imageFrame.maxX - rectStart.minX, rectStart.width + dx))
-            let newY = max(imageFrame.minY, min(rectStart.maxY - 50, rectStart.origin.y + dy))
-            newRect.size.width = newWidth
-            newRect.origin.y = newY
-            newRect.size.height = rectStart.maxY - newY
-        case .bottomLeft:
-            let newX = max(imageFrame.minX, min(rectStart.maxX - 50, rectStart.origin.x + dx))
-            let newHeight = max(50, min(imageFrame.maxY - rectStart.minY, rectStart.height + dy))
-            newRect.origin.x = newX
-            newRect.size.width = rectStart.maxX - newX
-            newRect.size.height = newHeight
-        case .bottomRight:
-            let newWidth = max(50, min(imageFrame.maxX - rectStart.minX, rectStart.width + dx))
-            let newHeight = max(50, min(imageFrame.maxY - rectStart.minY, rectStart.height + dy))
-            newRect.size.width = newWidth
-            newRect.size.height = newHeight
-        }
-        // Constrain to image bounds
-        if newRect.minX < imageFrame.minX { newRect.origin.x = imageFrame.minX }
-        if newRect.maxX > imageFrame.maxX { newRect.size.width = imageFrame.maxX - newRect.minX }
-        if newRect.minY < imageFrame.minY { newRect.origin.y = imageFrame.minY }
-        if newRect.maxY > imageFrame.maxY { newRect.size.height = imageFrame.maxY - newRect.minY }
-        rect = newRect
+    private func clamp(_ point: CGPoint) -> CGPoint {
+        CGPoint(
+            x: min(max(point.x, imageFrame.minX), imageFrame.maxX),
+            y: min(max(point.y, imageFrame.minY), imageFrame.maxY)
+        )
     }
 }
 
