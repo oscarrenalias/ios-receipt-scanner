@@ -24,6 +24,7 @@ struct EnhancedImageEditorView: View {
     @State private var isEditingSlider: Bool = false
     @State private var originalImage: UIImage? // Store the original image
     @State private var previousCropRect: CGRect? = nil // In image coordinates
+    @State private var showingShareSheet = false
     
     @Environment(\.presentationMode) var presentationMode
     @Environment(\.colorScheme) private var colorScheme
@@ -467,6 +468,21 @@ struct EnhancedImageEditorView: View {
                             .padding(.vertical, 12)
                         }
                         .foregroundColor(.blue)
+
+                        // Share button
+                        Button(action: {
+                            showingShareSheet = true
+                        }) {
+                            VStack(spacing: 4) {
+                                Image(systemName: "square.and.arrow.up")
+                                    .font(.system(size: 24))
+                                Text("Share")
+                                    .font(.caption)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                        }
+                        .foregroundColor(.blue)
                     }
                     .background(
                         colorScheme == .dark ? 
@@ -536,6 +552,9 @@ struct EnhancedImageEditorView: View {
                         .cancel()
                     ]
                 )
+            }
+            .sheet(isPresented: $showingShareSheet) {
+                ShareSheet(items: [processedImage ?? image])
             }
         }
     }
