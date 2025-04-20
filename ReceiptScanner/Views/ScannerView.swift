@@ -33,28 +33,30 @@ struct ScannerView: View {
                 // Main content
                 VStack(spacing: 20) {
                     if let image = processedImage ?? scannedImage {
-                        VStack {
-                            // Add top padding to move the image down from the top
-                            Spacer().frame(height: 50)
-                            
-                            Image(uiImage: image)
-                                .resizable()
-                                .scaledToFit()
-                                //.frame(maxHeight: 400)
-                                .cornerRadius(10)
-                                .shadow(radius: 5)
-                                .onTapGesture {
-                                    if let _ = scannedImage {
-                                        showingImageEditor = true
-                                    }
+                        GeometryReader { geometry in
+                            VStack {
+                                Spacer()
+                                VStack {
+                                    Image(uiImage: image)
+                                        .resizable()
+                                        .scaledToFit()
+                                        .cornerRadius(10)
+                                        .shadow(radius: 5)
+                                        .onTapGesture {
+                                            if let _ = scannedImage {
+                                                showingImageEditor = true
+                                            }
+                                        }
+                                    Text("Tap image to edit and save")
+                                        .foregroundColor(.secondary)
+                                        .font(.subheadline)
+                                        .padding(.top, 8)
                                 }
-                            
-                            // Add instructional text below the image
-                            Text("Tap image to edit and save")
-                                .foregroundColor(.secondary)
-                                .font(.subheadline)
-                                .padding(.top, 8)
+                                Spacer()
+                            }
+                            .frame(width: geometry.size.width, height: geometry.size.height)
                         }
+                        .padding(.bottom, 80) // Make room for the tab bar
                     } else {
                         VStack {
                             Image(systemName: "doc.text.viewfinder")
