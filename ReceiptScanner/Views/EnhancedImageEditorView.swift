@@ -25,6 +25,7 @@ struct EnhancedImageEditorView: View {
     @State private var originalImage: UIImage? // Store the original image
     @State private var previousCropRect: CGRect? = nil // In image coordinates
     @State private var showingShareSheet = false
+    @State private var isPortrait: Bool = UIDevice.current.orientation.isPortrait || UIDevice.current.orientation.isFlat
     
     @Environment(\.presentationMode) var presentationMode
     @Environment(\.colorScheme) private var colorScheme
@@ -544,6 +545,16 @@ struct EnhancedImageEditorView: View {
                 originalImage = normalized
                 processedImage = normalized
                 cacheAndDisplayImage()
+                NotificationCenter.default.addObserver(forName: UIDevice.orientationDidChangeNotification, object: nil, queue: .main) { _ in
+                    let orientation = UIDevice.current.orientation
+                    if orientation.isLandscape {
+                        UIDevice.current.setValue(UIInterfaceOrientation.portrait.rawValue, forKey: "orientation")
+                        UIViewController.attemptRotationToDeviceOrientation()
+                    }
+                }
+            }
+            .onDisappear {
+                NotificationCenter.default.removeObserver(self, name: UIDevice.orientationDidChangeNotification, object: nil)
             }
             .fullScreenCover(isPresented: $showingCropView) {
                 ImageCropView(

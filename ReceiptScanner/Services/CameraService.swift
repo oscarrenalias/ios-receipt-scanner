@@ -103,6 +103,28 @@ class CameraService: NSObject {
         
         photoOutput.capturePhoto(with: settings, delegate: self)
     }
+    
+    // MARK: - Orientation Handling
+    
+    func updatePreviewLayerFrame(to frame: CGRect) {
+        previewLayer?.frame = frame
+    }
+    
+    func updatePreviewLayerOrientation() {
+        guard let connection = previewLayer?.connection, connection.isVideoOrientationSupported else { return }
+        switch UIDevice.current.orientation {
+        case .portrait:
+            connection.videoOrientation = .portrait
+        case .landscapeRight:
+            connection.videoOrientation = .landscapeLeft
+        case .landscapeLeft:
+            connection.videoOrientation = .landscapeRight
+        case .portraitUpsideDown:
+            connection.videoOrientation = .portraitUpsideDown
+        default:
+            connection.videoOrientation = .portrait
+        }
+    }
 }
 
 // MARK: - AVCapturePhotoCaptureDelegate
@@ -158,6 +180,9 @@ class CameraViewController: UIViewController {
         super.viewDidLoad()
         setupUI()
         
+        // Observe device orientation changes
+        NotificationCenter.default.addObserver(self, selector: #selector(orientationChanged), name: UIDevice.orientationDidChangeNotification, object: nil)
+        
         CameraService.shared.setupCamera(in: cameraPreviewView) { success in
             if !success {
                 self.dismiss(animated: true) {
@@ -167,9 +192,16 @@ class CameraViewController: UIViewController {
         }
     }
     
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        // Ensure preview layer resizes with view
+        CameraService.shared.updatePreviewLayerFrame(to: cameraPreviewView.bounds)
+    }
+    
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
         CameraService.shared.stopSession()
+        NotificationCenter.default.removeObserver(self, name: UIDevice.orientationDidChangeNotification, object: nil)
     }
     
     private func setupUI() {
@@ -233,5 +265,9 @@ class CameraViewController: UIViewController {
         dismiss(animated: true) {
             self.onDismiss?()
         }
+    }
+    
+    @objc private func orientationChanged() {
+        CameraService.shared.updatePreviewLayerOrientation()
     }
 }
