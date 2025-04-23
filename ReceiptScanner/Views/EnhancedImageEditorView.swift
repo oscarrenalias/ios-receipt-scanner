@@ -27,6 +27,7 @@ struct EnhancedImageEditorView: View {
     @State private var showingShareSheet = false
     @State private var isPortrait: Bool = UIDevice.current.orientation.isPortrait || UIDevice.current.orientation.isFlat
     @State private var showControls: Bool = true // Controls are visible by default
+    @State private var useOpenCVEnhancement: Bool = false
     
     @Environment(\.presentationMode) var presentationMode
     @Environment(\.colorScheme) private var colorScheme
@@ -283,6 +284,18 @@ struct EnhancedImageEditorView: View {
         return UIImage(cgImage: newCGImage, scale: image.scale, orientation: .up)
     }
     
+    private func applyOpenCVEnhancement() {
+        isProcessing = true
+        DispatchQueue.global(qos: .userInitiated).async {
+            let enhanced = OpenCVWrapper.enhanceDocument(self.originalImage ?? self.image)
+            DispatchQueue.main.async {
+                self.processedImage = enhanced
+                self.cacheAndDisplayImage()
+                self.isProcessing = false
+            }
+        }
+    }
+    
     var body: some View {
         NavigationView {
             ZStack(alignment: .bottom) {
@@ -360,6 +373,21 @@ struct EnhancedImageEditorView: View {
                         // Sliders and controls section
                         if !isProcessing {
                             VStack(spacing: 15) {
+                                // Enhance toggle
+                                Toggle(isOn: $useOpenCVEnhancement.animation()) {
+                                    Text("Enhance")
+                                        .foregroundColor(.white)
+                                }
+                                .padding(.horizontal)
+                                .onChange(of: useOpenCVEnhancement) { _, newValue in
+                                    if newValue {
+                                        applyOpenCVEnhancement()
+                                    } else {
+                                        // Revert to original image and user adjustments
+                                        resetImage()
+                                    }
+                                }
+                                
                                 // Brightness slider
                                 VStack(alignment: .leading) {
                                     Text("Brightness: \(String(format: "%.2f", brightness))")

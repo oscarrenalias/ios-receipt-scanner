@@ -2,6 +2,7 @@ import UIKit
 import Vision
 import CoreImage
 import CoreImage.CIFilterBuiltins
+// Import OpenCV wrapper
 
 class ImageProcessingService {
     static let shared = ImageProcessingService()
@@ -14,7 +15,11 @@ class ImageProcessingService {
     // MARK: - Image Enhancements
     
     func enhanceReceiptImage(_ image: UIImage) -> UIImage {
-        // Apply basic enhancements to make receipt more readable
+        // Use OpenCV for advanced document enhancement
+        if let enhanced = OpenCVWrapper.enhanceDocument(image) {
+            return enhanced
+        }
+        // Fallback to Core Image if OpenCV fails
         guard let ciImage = CIImage(image: image) else { return image }
         
         var currentCIImage = ciImage
