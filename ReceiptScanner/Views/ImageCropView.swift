@@ -14,6 +14,11 @@ struct ImageCropView: View {
     let initialCropRect: CGRect?
     let completion: (UIImage?, CGRect?) -> Void
     
+    // Store the normalized image once for use everywhere
+    private var normalizedImage: UIImage {
+        image.normalizedToUpOrientation()
+    }
+    
     @State private var quad: Quadrilateral = Quadrilateral(
         topLeft: .zero, topRight: .zero, bottomRight: .zero, bottomLeft: .zero
     )
@@ -33,8 +38,7 @@ struct ImageCropView: View {
                 
                 // Image and overlay in a ZStack, overlay absolutely positioned over imageFrame
                 ZStack(alignment: .topLeading) {
-                    // Always normalize image to .up for both display and cropping
-                    let normalizedImage = image.normalizedToUpOrientation()
+                    // Use normalized image for display
                     Image(uiImage: normalizedImage)
                         .resizable()
                         .scaledToFit()
@@ -190,8 +194,7 @@ struct ImageCropView: View {
     
     private func performCrop() {
         guard quad.topLeft != .zero else { return }
-        // Use the same normalized image as displayed
-        let normalizedImage = image.normalizedToUpOrientation()
+        // Use the normalized image for cropping
         let imageDisplayFrame = imageFrame
         let scaleX = normalizedImage.size.width / imageDisplayFrame.width
         let scaleY = normalizedImage.size.height / imageDisplayFrame.height
@@ -225,7 +228,8 @@ struct ImageCropView: View {
     private func detectDocumentEdges() {
         isProcessing = true
         DispatchQueue.global(qos: .userInitiated).async {
-            guard let cgImage = image.cgImage else {
+            // Use normalized image for Vision
+            guard let cgImage = normalizedImage.cgImage else {
                 DispatchQueue.main.async {
                     print("❌ Vision: Could not get CGImage from UIImage")
                     isProcessing = false
@@ -290,10 +294,9 @@ struct ImageCropView: View {
 
     private func setQuad(from observation: VNRectangleObservation) {
         guard let frame = getImageFrame() else { return }
-        // VNRectangleObservation provides normalized coordinates (0,0) is bottom-left
-        // Convert to image coordinates, then to displayed frame
-        let imageWidth = image.size.width
-        let imageHeight = image.size.height
+        // Use normalized image size
+        let imageWidth = normalizedImage.size.width
+        let imageHeight = normalizedImage.size.height
         func convert(_ point: CGPoint) -> CGPoint {
             // Convert normalized Vision point to image pixel coordinates
             CGPoint(x: point.x * imageWidth, y: (1 - point.y) * imageHeight)
